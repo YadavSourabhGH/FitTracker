@@ -48,7 +48,7 @@ Fitness users need to organize workouts, monitor daily steps, understand progres
 
 ## App Screens & Visual Gallery
 
-> Screenshots are from v1.0. v1.1 keeps the same design language and adds the features listed below.
+> Verified on physical Android hardware (Samsung Galaxy M35 5G, Android 14) demonstrating full end-to-end functionality.
 
 | 01. Dashboard Overview | 02. Health & AI Coach | 03. Workout Plans & Schedule |
 |:---:|:---:|:---:|

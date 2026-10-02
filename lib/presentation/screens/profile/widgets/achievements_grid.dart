@@ -152,36 +152,42 @@ class AchievementsGrid extends StatelessWidget {
             Stack(
               alignment: Alignment.center,
               children: [
-                SizedBox(
+                Container(
                   width: 52,
                   height: 52,
-                  child: CircularProgressIndicator(
-                    value: a.isUnlocked ? 1.0 : (a.progress > 0.05 ? a.progress : 0.0),
-                    strokeWidth: 3,
-                    strokeCap: StrokeCap.round,
-                    backgroundColor: AppColors.surfaceContainerHigh,
-                    valueColor: AlwaysStoppedAnimation(
-                      a.isUnlocked ? AppColors.accentAmber : AppColors.primaryCoral,
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 42,
-                  height: 42,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: a.isUnlocked ? AppColors.primaryCoralLight : AppColors.surfaceContainer,
                     border: Border.all(
                       color: a.isUnlocked
-                          ? AppColors.primaryCoral.withValues(alpha: 0.5)
-                          : AppColors.cardBorder.withValues(alpha: 0.6),
-                      width: 1.5,
+                          ? AppColors.accentAmber
+                          : AppColors.surfaceContainerHigh,
+                      width: a.isUnlocked ? 2.5 : 1.5,
                     ),
                   ),
-                  child: Icon(
-                    iconForName(a.iconName),
-                    color: a.isUnlocked ? AppColors.primaryCoral : AppColors.textMuted.withValues(alpha: 0.5),
-                    size: 19,
+                  child: Center(
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: a.isUnlocked
+                            ? AppColors.primaryCoralLight
+                            : AppColors.surfaceContainer,
+                        border: Border.all(
+                          color: a.isUnlocked
+                              ? AppColors.primaryCoral.withValues(alpha: 0.5)
+                              : AppColors.cardBorder.withValues(alpha: 0.5),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Icon(
+                        iconForName(a.iconName),
+                        color: a.isUnlocked
+                            ? AppColors.primaryCoral
+                            : AppColors.textMuted.withValues(alpha: 0.45),
+                        size: 20,
+                      ),
+                    ),
                   ),
                 ),
                 if (!a.isUnlocked)
