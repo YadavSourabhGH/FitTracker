@@ -63,7 +63,7 @@ class SectionHeader extends StatelessWidget {
           const SizedBox(width: 6),
         ],
         Expanded(child: Text(title, style: AppTypography.titleLarge)),
-        if (trailing != null) trailing!,
+        ?trailing,
         if (actionLabel != null)
           InkWell(
             borderRadius: BorderRadius.circular(8),
