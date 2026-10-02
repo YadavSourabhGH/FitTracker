@@ -133,7 +133,7 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(12)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -142,9 +142,17 @@ class Pill extends StatelessWidget {
             Icon(icon, size: 11, color: foreground),
             const SizedBox(width: 3),
           ],
-          Text(
-            label,
-            style: AppTypography.labelSmall.copyWith(color: foreground, fontWeight: FontWeight.w700),
+          Flexible(
+            child: Text(
+              label,
+              style: AppTypography.labelSmall.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w700,
+                fontSize: 10.5,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

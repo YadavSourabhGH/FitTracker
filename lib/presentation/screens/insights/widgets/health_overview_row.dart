@@ -82,7 +82,7 @@ class HealthOverviewRow extends ConsumerWidget {
                 icon: LucideIcons.heart,
                 iconColor: AppColors.accentPink,
                 iconBg: AppColors.accentPinkLight,
-                badge: !hcOn ? 'Not connected' : (hr == null ? 'No data' : 'Avg today'),
+                badge: !hcOn ? 'Sync' : (hr == null ? 'No data' : 'Avg today'),
                 title: 'Heart rate',
                 value: hr?.toString() ?? '-',
                 unit: 'bpm',
@@ -95,7 +95,7 @@ class HealthOverviewRow extends ConsumerWidget {
                 icon: LucideIcons.moon,
                 iconColor: AppColors.accentPurple,
                 iconBg: AppColors.accentPurpleLight,
-                badge: !hcOn ? 'Not connected' : (sleep == null ? 'No data' : 'Last night'),
+                badge: !hcOn ? 'Sync' : (sleep == null ? 'No data' : 'Last night'),
                 title: 'Sleep',
                 value: sleep == null ? '-' : MetricFormatter.formatDurationMins(sleep),
                 unit: '',
@@ -145,9 +145,10 @@ class _MetricCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              IconBadge(icon: icon, color: iconColor, background: iconBg, size: 34, circle: false),
-              const Spacer(),
+              IconBadge(icon: icon, color: iconColor, background: iconBg, size: 30, circle: false),
+              const SizedBox(width: 4),
               Flexible(
                 child: Pill(
                   label: badge,
@@ -221,7 +222,7 @@ class _HydrationCard extends StatelessWidget {
                 icon: LucideIcons.droplets,
                 color: AppColors.accentBlue,
                 background: AppColors.accentBlueLight,
-                size: 34,
+                size: 30,
                 circle: false,
               ),
               const Spacer(),
