@@ -1,10 +1,10 @@
-/// Step and activity telemetry models for Health Connect and Hardware Sensor.
+/// Step and activity telemetry models.
 class DailyStepRecord {
   final String dateString; // YYYY-MM-DD
   final int stepCount;
   final double distanceMeters;
   final double activeCalories;
-  final String source; // HEALTH_CONNECT, SAMSUNG_HEALTH, HARDWARE_SENSOR
+  final String source; // HEALTH_CONNECT, HARDWARE_SENSOR
   final DateTime syncedAt;
 
   const DailyStepRecord({
@@ -17,24 +17,33 @@ class DailyStepRecord {
   });
 
   Map<String, dynamic> toMap() => {
-    'dateString': dateString,
-    'stepCount': stepCount,
-    'distanceMeters': distanceMeters,
-    'activeCalories': activeCalories,
-    'source': source,
-    'syncedAt': syncedAt.toIso8601String(),
-  };
+        'dateString': dateString,
+        'stepCount': stepCount,
+        'distanceMeters': distanceMeters,
+        'activeCalories': activeCalories,
+        'source': source,
+        'syncedAt': syncedAt.toIso8601String(),
+      };
 
   factory DailyStepRecord.fromMap(Map<String, dynamic> map) {
     return DailyStepRecord(
       dateString: map['dateString'] as String,
-      stepCount: map['stepCount'] as int? ?? 0,
+      stepCount: (map['stepCount'] as num?)?.toInt() ?? 0,
       distanceMeters: (map['distanceMeters'] as num?)?.toDouble() ?? 0.0,
       activeCalories: (map['activeCalories'] as num?)?.toDouble() ?? 0.0,
       source: map['source'] as String? ?? 'HARDWARE_SENSOR',
       syncedAt: DateTime.tryParse(map['syncedAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
+
+  factory DailyStepRecord.empty(String dateString) => DailyStepRecord(
+        dateString: dateString,
+        stepCount: 0,
+        distanceMeters: 0,
+        activeCalories: 0,
+        source: 'NONE',
+        syncedAt: DateTime.now(),
+      );
 }
 
 class HourlyStepBucket {

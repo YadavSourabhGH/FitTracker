@@ -1,142 +1,418 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/metric_formatter.dart';
 import '../../../data/models/nutrition_model.dart';
+import '../../../data/services/food_catalog.dart';
 import '../../../data/services/nutrition_api_service.dart';
+import '../../common_widgets/ui_kit.dart';
+import '../../providers/nutrition_providers.dart';
 
-/// Modal to select healthy foods or search real foods from Open Food Facts API.
-class FoodSearchModal extends StatefulWidget {
-  final ValueChanged<NutritionItem> onFoodSelected;
-
-  const FoodSearchModal({super.key, required this.onFoodSelected});
-
-  @override
-  State<FoodSearchModal> createState() => _FoodSearchModalState();
+/// Opens the food picker and logs the chosen food on [day].
+Future<void> showFoodSearch(BuildContext context, WidgetRef ref, String day, {String? initialQuery}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => FoodSearchSheet(day: day, initialQuery: initialQuery),
+  );
 }
 
-class _FoodSearchModalState extends State<FoodSearchModal> {
-  final _searchController = TextEditingController();
-  final _apiService = NutritionApiService();
-  List<NutritionItem> _results = [];
-  bool _isLoading = false;
+class FoodSearchSheet extends ConsumerStatefulWidget {
+  final String day;
+  final String? initialQuery;
 
-  static const List<NutritionItem> _commonFoods = [
-    NutritionItem(id: 'c1', name: 'Rolled Oats (100g)', brand: 'Whole Grain', servingSize: 100, servingUnit: 'g', calories: 389, proteinGrams: 16.9, carbsGrams: 66.3, fatGrams: 6.9, mealType: 'Breakfast'),
-    NutritionItem(id: 'c2', name: 'Boiled Eggs (2 eggs)', brand: 'Protein', servingSize: 100, servingUnit: 'g', calories: 155, proteinGrams: 12.6, carbsGrams: 1.1, fatGrams: 10.6, mealType: 'Breakfast'),
-    NutritionItem(id: 'c3', name: 'Grilled Chicken Breast (150g)', brand: 'Lean Poultry', servingSize: 150, servingUnit: 'g', calories: 247, proteinGrams: 46.5, carbsGrams: 0.0, fatGrams: 5.4, mealType: 'Lunch'),
-    NutritionItem(id: 'c4', name: 'Greek Yogurt 0% (200g)', brand: 'Dairy', servingSize: 200, servingUnit: 'g', calories: 118, proteinGrams: 20.0, carbsGrams: 7.2, fatGrams: 0.8, mealType: 'Snack'),
-    NutritionItem(id: 'c5', name: 'Brown Rice Cooked (150g)', brand: 'Grains', servingSize: 150, servingUnit: 'g', calories: 166, proteinGrams: 3.5, carbsGrams: 35.0, fatGrams: 1.3, mealType: 'Lunch'),
-    NutritionItem(id: 'c6', name: 'Banana (1 medium)', brand: 'Fruit', servingSize: 118, servingUnit: 'g', calories: 105, proteinGrams: 1.3, carbsGrams: 27.0, fatGrams: 0.3, mealType: 'Snack'),
-    NutritionItem(id: 'c7', name: 'Whey Protein Scoop (30g)', brand: 'Supplement', servingSize: 30, servingUnit: 'g', calories: 120, proteinGrams: 24.0, carbsGrams: 2.0, fatGrams: 1.5, mealType: 'Post-Workout'),
-    NutritionItem(id: 'c8', name: 'Grilled Salmon (150g)', brand: 'Seafood', servingSize: 150, servingUnit: 'g', calories: 312, proteinGrams: 34.0, carbsGrams: 0.0, fatGrams: 19.5, mealType: 'Dinner'),
-    NutritionItem(id: 'c9', name: 'Avocado (100g)', brand: 'Produce', servingSize: 100, servingUnit: 'g', calories: 160, proteinGrams: 2.0, carbsGrams: 8.5, fatGrams: 14.7, mealType: 'Snack'),
-    NutritionItem(id: 'c10', name: 'Apple (1 medium)', brand: 'Fruit', servingSize: 150, servingUnit: 'g', calories: 78, proteinGrams: 0.4, carbsGrams: 21.0, fatGrams: 0.3, mealType: 'Snack'),
-  ];
+  const FoodSearchSheet({super.key, required this.day, this.initialQuery});
 
-  void _performSearch() async {
-    final query = _searchController.text.trim();
-    if (query.isEmpty) {
-      setState(() => _results = []);
-      return;
+  @override
+  ConsumerState<FoodSearchSheet> createState() => _FoodSearchSheetState();
+}
+
+class _FoodSearchSheetState extends ConsumerState<FoodSearchSheet> {
+  late final TextEditingController _controller;
+  final _api = NutritionApiService();
+  List<NutritionItem> _online = const [];
+  bool _loading = false;
+  String? _error;
+  bool _searchedOnline = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialQuery ?? '');
+    if ((widget.initialQuery ?? '').isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _searchOnline());
     }
+  }
 
-    setState(() => _isLoading = true);
-    final items = await _apiService.searchFood(query);
-    if (!mounted) return;
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchOnline() async {
+    final q = _controller.text.trim();
+    if (q.isEmpty) return;
+    FocusScope.of(context).unfocus();
     setState(() {
-      _results = items;
-      _isLoading = false;
+      _loading = true;
+      _error = null;
+      _searchedOnline = true;
     });
+    try {
+      final items = await _api.searchFood(q);
+      if (!mounted) return;
+      setState(() {
+        _online = items;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _online = const [];
+        _loading = false;
+        _error = e is TimeoutException
+            ? 'The food database took too long to respond. Check your connection.'
+            : 'Could not reach the food database. Showing offline foods only.';
+      });
+    }
+  }
+
+  Future<void> _pick(NutritionItem item) async {
+    final added = await showAddFoodDialog(context, ref, item, widget.day);
+    if (added && mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final query = _searchController.text.trim();
-    final displayItems = query.isEmpty ? _commonFoods : _results;
+    final query = _controller.text.trim();
+    final recent = ref.watch(recentFoodsProvider).value ?? const <NutritionItem>[];
+    final recentFiltered = query.isEmpty
+        ? recent
+        : recent.where((f) => f.name.toLowerCase().contains(query.toLowerCase())).toList();
+    final catalog = FoodCatalog.search(query);
 
-    return Material(
-      color: Colors.white,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.78,
-        padding: const EdgeInsets.all(20),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.85,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(child: Text('Add food', style: AppTypography.headlineMedium)),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final added = await showCustomFoodDialog(context, ref, widget.day);
+                      if (added && context.mounted) Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.edit_note, size: 18),
+                    label: const Text('Custom'),
+                  ),
+                  IconButton(icon: const Icon(LucideIcons.x), onPressed: () => Navigator.pop(context)),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: _controller,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _searchOnline(),
+                onChanged: (_) => setState(() {
+                  _searchedOnline = false;
+                  _online = const [];
+                  _error = null;
+                }),
+                decoration: InputDecoration(
+                  hintText: 'Search foods (e.g. paneer, oats, protein bar)',
+                  prefixIcon: const Icon(LucideIcons.search, color: AppColors.primaryCoral, size: 20),
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setState(() {
+                            _controller.clear();
+                            _online = const [];
+                            _searchedOnline = false;
+                          }),
+                        ),
+                  fillColor: AppColors.scaffoldBase,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                children: [
+                  if (query.isNotEmpty && !_searchedOnline)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: _searchOnline,
+                        icon: const Icon(Icons.public, size: 18),
+                        label: Text('Search "$query" in Open Food Facts'),
+                      ),
+                    ),
+                  if (_loading) const LoadingBlock(height: 80),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(_error!, style: AppTypography.bodyMedium.copyWith(color: AppColors.accentPink)),
+                    ),
+                  if (_searchedOnline && !_loading && _error == null) ...[
+                    _header('Open Food Facts (${_online.length})', 'Values per 100 g'),
+                    if (_online.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text('No products found online.', style: AppTypography.bodyMedium),
+                      ),
+                    ..._online.map(_tile),
+                  ],
+                  if (recentFiltered.isNotEmpty) ...[
+                    _header('Recent', 'Last logged serving'),
+                    ...recentFiltered.map(_tile),
+                  ],
+                  _header('Common foods', 'USDA reference values'),
+                  if (catalog.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text('No offline matches. Try an online search.', style: AppTypography.bodyMedium),
+                    ),
+                  ...catalog.map(_tile),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(String title, String sub) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Text(
+            title.toUpperCase(),
+            style: AppTypography.labelSmall.copyWith(color: AppColors.primaryCoral, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(width: 8),
+          Text(sub, style: AppTypography.labelSmall),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(NutritionItem item) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+      title: Text(item.name, style: AppTypography.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        '${item.brand.isEmpty ? '' : '${item.brand} - '}${MetricFormatter.formatWeight(item.servingSize)} ${item.servingUnit} - '
+        '${item.calories.round()} kcal - P ${item.proteinGrams.toStringAsFixed(1)} C ${item.carbsGrams.toStringAsFixed(1)} F ${item.fatGrams.toStringAsFixed(1)}',
+        style: AppTypography.bodyMedium.copyWith(fontSize: 11),
+      ),
+      trailing: const IconBadge(icon: LucideIcons.plus, size: 30, iconSize: 16),
+      onTap: () => _pick(item),
+    );
+  }
+}
+
+/// Serving and meal picker; returns true when the food was logged.
+Future<bool> showAddFoodDialog(BuildContext context, WidgetRef ref, NutritionItem item, String day) async {
+  var servings = 1.0;
+  var meal = NutritionItem.mealTypeForNow();
+  final result = await showModalBottomSheet<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSheet) {
+        final scaled = item.scaled(servings, id: 'preview', mealType: meal);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name, style: AppTypography.headlineMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(
+                  '1 serving = ${MetricFormatter.formatWeight(item.servingSize)} ${item.servingUnit}',
+                  style: AppTypography.bodyMedium,
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  children: NutritionItem.mealTypes
+                      .map((m) => ChoiceChip(
+                            label: Text(m),
+                            selected: m == meal,
+                            showCheckmark: false,
+                            selectedColor: AppColors.primaryCoral,
+                            labelStyle: AppTypography.labelSmall.copyWith(
+                              color: m == meal ? Colors.white : AppColors.textHeadline,
+                              fontSize: 11,
+                            ),
+                            onSelected: (_) => setSheet(() => meal = m),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 14),
+                NumberStepper(
+                  label: 'SERVINGS',
+                  value: servings.toStringAsFixed(servings == servings.roundToDouble() ? 0 : 2),
+                  onMinus: () => setSheet(() => servings = (servings - 0.5).clamp(0.25, 20.0).toDouble()),
+                  onPlus: () => setSheet(() => servings = (servings + 0.5).clamp(0.25, 20.0).toDouble()),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _macro('kcal', scaled.calories),
+                    _macro('Protein', scaled.proteinGrams, unit: 'g'),
+                    _macro('Carbs', scaled.carbsGrams, unit: 'g'),
+                    _macro('Fat', scaled.fatGrams, unit: 'g'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final entry = item.scaled(
+                        servings,
+                        id: 'meal_${DateTime.now().microsecondsSinceEpoch}',
+                        mealType: meal,
+                      );
+                      await ref.read(nutritionControllerProvider).addMeal(entry, day);
+                      if (ctx.mounted) Navigator.pop(ctx, true);
+                    },
+                    child: Text('Add to $meal'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  return result ?? false;
+}
+
+Widget _macro(String label, double value, {String unit = ''}) {
+  return Column(
+    children: [
+      Text('${value.round()}$unit', style: AppTypography.monoNumber(fontSize: 16, fontWeight: FontWeight.w800)),
+      Text(label, style: AppTypography.labelSmall),
+    ],
+  );
+}
+
+/// Manual entry for foods not in any database.
+Future<bool> showCustomFoodDialog(BuildContext context, WidgetRef ref, String day) async {
+  final name = TextEditingController();
+  final kcal = TextEditingController();
+  final protein = TextEditingController();
+  final carbs = TextEditingController();
+  final fat = TextEditingController();
+  var meal = NutritionItem.mealTypeForNow();
+
+  double parse(TextEditingController c) => double.tryParse(c.text.replaceAll(',', '.')) ?? 0;
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setD) => AlertDialog(
+        title: const Text('Custom food'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Select Food & Meal', style: AppTypography.titleLarge),
-              IconButton(icon: const Icon(LucideIcons.x), onPressed: () => Navigator.pop(context)),
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: kcal,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Calories (kcal)'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: protein,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Protein g'),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: carbs,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Carbs g'),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: TextField(
+                      controller: fat,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Fat g'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: meal,
+                items: NutritionItem.mealTypes.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                onChanged: (v) => setD(() => meal = v ?? meal),
+                decoration: const InputDecoration(labelText: 'Meal'),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // Search Field
-          TextField(
-            controller: _searchController,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _performSearch(),
-            onChanged: (val) {
-              if (val.trim().isEmpty) setState(() => _results = []);
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              if (name.text.trim().isEmpty || parse(kcal) <= 0) {
+                showAppSnack(ctx, 'Enter a name and calories');
+                return;
+              }
+              Navigator.pop(ctx, true);
             },
-            decoration: InputDecoration(
-              hintText: 'Search Open Food Facts or pick below...',
-              prefixIcon: const Icon(LucideIcons.search, color: AppColors.primaryCoral, size: 20),
-              suffixIcon: IconButton(icon: const Icon(LucideIcons.arrowRight), onPressed: _performSearch),
-              filled: true,
-              fillColor: AppColors.scaffoldBase,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            ),
+            child: const Text('Add'),
           ),
-          const SizedBox(height: 14),
-
-          Text(
-            query.isEmpty ? 'Popular Nutritious Choices' : 'Search Results (${displayItems.length})',
-            style: AppTypography.labelSmall.copyWith(color: AppColors.primaryCoral, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-
-          if (_isLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: AppColors.primaryCoral)))
-          else if (displayItems.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: Text('No matching items found.', style: AppTypography.bodyMedium),
-              ),
-            )
-          else
-            Expanded(
-              child: ListView.separated(
-                itemCount: displayItems.length,
-                separatorBuilder: (_, _) => const Divider(height: 1, color: AppColors.cardBorder),
-                itemBuilder: (context, index) {
-                  final item = displayItems[index];
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                    title: Text(item.name, style: AppTypography.titleMedium),
-                    subtitle: Text(
-                      '${item.calories.toStringAsFixed(0)} kcal • P: ${item.proteinGrams.toStringAsFixed(1)}g | C: ${item.carbsGrams.toStringAsFixed(1)}g | F: ${item.fatGrams.toStringAsFixed(1)}g',
-                      style: AppTypography.bodyMedium.copyWith(fontSize: 12),
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(color: AppColors.primaryCoralLight, shape: BoxShape.circle),
-                      child: const Icon(LucideIcons.plus, color: AppColors.primaryCoral, size: 16),
-                    ),
-                    onTap: () {
-                      widget.onFoodSelected(item);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
         ],
       ),
     ),
   );
-}
+
+  if (ok != true) return false;
+  final item = NutritionItem(
+    id: 'meal_${DateTime.now().microsecondsSinceEpoch}',
+    name: name.text.trim(),
+    brand: 'Custom',
+    servingSize: 1,
+    servingUnit: 'serving',
+    calories: parse(kcal),
+    proteinGrams: parse(protein),
+    carbsGrams: parse(carbs),
+    fatGrams: parse(fat),
+    mealType: meal,
+  );
+  await ref.read(nutritionControllerProvider).addMeal(item, day);
+  return true;
 }

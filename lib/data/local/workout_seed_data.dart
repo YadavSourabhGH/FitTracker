@@ -1,67 +1,319 @@
 import 'package:sqflite/sqflite.dart';
 
-/// Pre-seeded scientific workout plans and verified exercise mechanics.
+/// Built-in workout library with standard exercise technique cues.
 class WorkoutSeedData {
-  static Future<void> seed(Database db) async {
-    // 1. Insert Pre-made Programs
-    await db.rawInsert('''
-      INSERT INTO workouts (id, title, description, category, difficulty, estimatedMinutes) VALUES
-      ('plan_ppl', 'Push / Pull / Legs (PPL)', 'High-volume hypertrophy split focused on progressive overload.', 'Hypertrophy', 'Intermediate', 60),
-      ('plan_upper_lower', 'Upper / Lower Power', '4-day split emphasizing compound strength and recovery balance.', 'Strength', 'Intermediate', 55),
-      ('plan_fullbody', 'Full Body Foundation', '3-day routine focusing on core compound movement mastery.', 'Strength', 'Beginner', 45),
-      ('plan_c25k', 'Couch to 5K Endurance', 'Aerobic conditioning and running intervals.', 'Cardio', 'Beginner', 30),
-      ('plan_hiit', 'Kettlebell & Bodyweight HIIT', 'High-intensity functional circuit for metabolic conditioning.', 'HIIT', 'Intermediate', 35);
-    ''');
+  WorkoutSeedData._();
 
-    // 2. Insert Core Exercises with Biomechanics
-    await db.rawInsert('''
-      INSERT INTO exercises (id, name, muscleGroup, secondaryMuscles, equipment, mechanicsType, setupInstructions, executionInstructions, commonMistakes, defaultRestSeconds) VALUES
-      ('ex_bench', 'Barbell Bench Press', 'Chest', 'Triceps, Front Delts', 'Barbell', 'compound', 
-       'Retract scapulae into bench, 5 points of contact, grip slightly wider than shoulders.', 
-       'Lower under control to sternum with 45-deg elbow tuck; press explosively back.', 
-       'Bouncing bar off ribcage, flaring elbows 90 degrees.', 120),
-      ('ex_deadlift', 'Conventional Deadlift', 'Back', 'Hamstrings, Glutes', 'Barbell', 'compound', 
-       'Bar over mid-foot, hinge hips back, grip outside shins, pack lats.', 
-       'Push floor away, drive hips through at top without hyperextending.', 
-       'Rounding lower back, letting bar drift away from shins.', 180),
-      ('ex_squat', 'Barbell Back Squat', 'Quadriceps', 'Glutes, Hamstrings', 'Barbell', 'compound', 
-       'Bar on upper traps, shoulder-width stance, toes 20-deg out, brace 360.', 
-       'Break hips and knees, track knees over toes, hit depth below parallel.', 
-       'Knees caving in, shifting weight to toes.', 180),
-      ('ex_ohp', 'Overhead Barbell Press', 'Shoulders', 'Triceps, Upper Chest', 'Barbell', 'compound', 
-       'Bar at collarbone, elbows slightly forward, squeeze glutes and abs.', 
-       'Press vertically in straight path, move head through window at top.', 
-       'Excessive backward lumbar hyperextension.', 120),
-      ('ex_row', 'Barbell Bent-Over Row', 'Back', 'Biceps, Rear Delts', 'Barbell', 'compound', 
-       'Hinge torso to 45 degrees, neutral spine, overhand grip.', 
-       'Drive elbows back to ceiling, pull bar to belly button.', 
-       'Jerking torso upward to heave weight.', 90),
-      ('ex_incline_db', 'Incline Dumbbell Press', 'Chest', 'Anterior Deltoids, Triceps', 'Dumbbells', 'compound',
-       'Set bench to 30 degrees, retract scapulae, plant feet.',
-       'Lower dumbbells until upper arms parallel to floor, press upward.',
-       'Arching back to change press angle.', 90),
-      ('ex_lat_pulldown', 'Lat Pulldown', 'Back', 'Biceps, Forearms', 'Cable', 'compound',
-       'Sit with thighs anchored, wide overhand grip on bar.',
-       'Pull bar down to upper chest while depressing scapulae.',
-       'Swinging torso excessively backward.', 90),
-      ('ex_leg_press', '45-Degree Leg Press', 'Quadriceps', 'Glutes, Calves', 'Machine', 'compound',
-       'Feet shoulder-width on platform, back pressed against seat.',
-       'Lower weight until knees reach 90 degrees, press through heels.',
-       'Locking knees forcefully at extension.', 90);
-    ''');
+  static const List<Map<String, Object>> workouts = [
+    {
+      'id': 'plan_fullbody',
+      'title': 'Full Body Foundation',
+      'description': 'Three-day beginner routine built on squat, push, pull and core patterns. Ideal for learning technique and building a base.',
+      'category': 'Strength',
+      'difficulty': 'Beginner',
+      'estimatedMinutes': 45,
+    },
+    {
+      'id': 'plan_push',
+      'title': 'Push Day',
+      'description': 'Chest, shoulders and triceps hypertrophy session with progressive overload on the bench and overhead press.',
+      'category': 'Hypertrophy',
+      'difficulty': 'Intermediate',
+      'estimatedMinutes': 60,
+    },
+    {
+      'id': 'plan_pull',
+      'title': 'Pull Day',
+      'description': 'Back and biceps session anchored by the deadlift and vertical and horizontal pulls.',
+      'category': 'Hypertrophy',
+      'difficulty': 'Intermediate',
+      'estimatedMinutes': 55,
+    },
+    {
+      'id': 'plan_legs',
+      'title': 'Leg Day',
+      'description': 'Quads, hamstrings and glutes. Squat-focused lower body session with accessory work and core bracing.',
+      'category': 'Hypertrophy',
+      'difficulty': 'Intermediate',
+      'estimatedMinutes': 60,
+    },
+    {
+      'id': 'plan_upper_power',
+      'title': 'Upper Body Power 5x5',
+      'description': 'Heavy, low-rep upper body strength day. Long rests, crisp reps, add load when all sets are completed.',
+      'category': 'Strength',
+      'difficulty': 'Advanced',
+      'estimatedMinutes': 55,
+    },
+    {
+      'id': 'plan_hiit',
+      'title': 'Kettlebell & Bodyweight HIIT',
+      'description': 'High-intensity circuit for metabolic conditioning. Move quickly between exercises and keep rests short.',
+      'category': 'HIIT',
+      'difficulty': 'Intermediate',
+      'estimatedMinutes': 30,
+    },
+    {
+      'id': 'plan_c25k',
+      'title': 'Couch to 5K: Week 1',
+      'description': 'Run/walk intervals to build aerobic capacity. Warm up with a brisk walk, alternate jogging and walking, then cool down.',
+      'category': 'Cardio',
+      'difficulty': 'Beginner',
+      'estimatedMinutes': 30,
+    },
+    {
+      'id': 'plan_core',
+      'title': 'Core Stability',
+      'description': 'Short anti-extension and hip-stability circuit that supports heavier lifting and protects the lower back.',
+      'category': 'Strength',
+      'difficulty': 'Beginner',
+      'estimatedMinutes': 20,
+    },
+    {
+      'id': 'plan_mobility',
+      'title': 'Mobility & Recovery Flow',
+      'description': 'Gentle mobility flow for hips, spine and shoulders. Use on rest days or after training.',
+      'category': 'Mobility',
+      'difficulty': 'Beginner',
+      'estimatedMinutes': 20,
+    },
+  ];
 
-    // 3. Link Exercises to Workouts
-    await db.rawInsert('''
-      INSERT INTO workout_exercises (id, workoutId, exerciseId, sortOrder, targetSets, targetReps, targetRpe, restSeconds) VALUES
-      ('we_1', 'plan_ppl', 'ex_bench', 1, 4, '6-8', 8.0, 120),
-      ('we_2', 'plan_ppl', 'ex_incline_db', 2, 3, '8-10', 8.5, 90),
-      ('we_3', 'plan_ppl', 'ex_ohp', 3, 3, '8-10', 8.5, 90),
-      ('we_4', 'plan_upper_lower', 'ex_bench', 1, 4, '5', 8.0, 150),
-      ('we_5', 'plan_upper_lower', 'ex_row', 2, 4, '6', 8.0, 120),
-      ('we_6', 'plan_upper_lower', 'ex_lat_pulldown', 3, 3, '10', 8.5, 90),
-      ('we_7', 'plan_fullbody', 'ex_squat', 1, 3, '8', 8.0, 150),
-      ('we_8', 'plan_fullbody', 'ex_bench', 2, 3, '8', 8.0, 120),
-      ('we_9', 'plan_fullbody', 'ex_deadlift', 3, 3, '5', 8.0, 180);
-    ''');
+  static Map<String, Object> _ex(
+    String id,
+    String name,
+    String muscle,
+    String secondary,
+    String equipment,
+    String mechanics,
+    String tracking,
+    String setup,
+    String execution,
+    String mistakes,
+    int rest,
+  ) {
+    return {
+      'id': id,
+      'name': name,
+      'muscleGroup': muscle,
+      'secondaryMuscles': secondary,
+      'equipment': equipment,
+      'mechanicsType': mechanics,
+      'trackingType': tracking,
+      'setupInstructions': setup,
+      'executionInstructions': execution,
+      'commonMistakes': mistakes,
+      'defaultRestSeconds': rest,
+    };
+  }
+
+  static final List<Map<String, Object>> exercises = [
+    _ex('ex_squat', 'Barbell Back Squat', 'Quadriceps', 'Glutes, Hamstrings, Core', 'Barbell', 'compound', 'weight_reps',
+        'Bar on upper traps, feet shoulder-width, toes turned out slightly. Brace your core before unracking.',
+        'Sit down between your hips, keep knees tracking over toes and reach at least parallel. Drive up through mid-foot.',
+        'Knees caving in, heels lifting, losing the brace at the bottom.', 180),
+    _ex('ex_bench', 'Barbell Bench Press', 'Chest', 'Triceps, Front Delts', 'Barbell', 'compound', 'weight_reps',
+        'Eyes under the bar, shoulder blades pinned back and down, feet planted. Grip slightly wider than shoulders.',
+        'Lower under control to the lower chest with elbows around 45 degrees, then press back up over the shoulders.',
+        'Bouncing the bar off the chest, flaring elbows to 90 degrees, lifting hips off the bench.', 150),
+    _ex('ex_deadlift', 'Conventional Deadlift', 'Back', 'Hamstrings, Glutes, Forearms', 'Barbell', 'compound', 'weight_reps',
+        'Bar over mid-foot, hinge to grip just outside the shins, chest up and lats tight.',
+        'Push the floor away, keep the bar close to the legs and lock out by squeezing the glutes.',
+        'Rounding the lower back, jerking the bar off the floor, hyperextending at lockout.', 180),
+    _ex('ex_ohp', 'Overhead Press', 'Shoulders', 'Triceps, Upper Chest', 'Barbell', 'compound', 'weight_reps',
+        'Bar on the front of the shoulders, grip just outside shoulder width, glutes and abs braced.',
+        'Press straight up, moving the head back then through as the bar passes the forehead. Lock out overhead.',
+        'Leaning back excessively, pressing the bar forward instead of vertically.', 120),
+    _ex('ex_row', 'Barbell Bent-Over Row', 'Back', 'Biceps, Rear Delts', 'Barbell', 'compound', 'weight_reps',
+        'Hinge to about 45 degrees with a neutral spine, overhand grip at shoulder width.',
+        'Pull the bar to the lower ribs leading with the elbows, pause, and lower under control.',
+        'Standing up as you row, using momentum, rounding the back.', 120),
+    _ex('ex_incline_db', 'Incline Dumbbell Press', 'Chest', 'Front Delts, Triceps', 'Dumbbells', 'compound', 'weight_reps',
+        'Bench at 30 degrees, dumbbells at chest level, shoulder blades retracted.',
+        'Press up and slightly together, then lower until the upper arms are just below parallel.',
+        'Bench too steep, arching the lower back, clanging the dumbbells at the top.', 90),
+    _ex('ex_lat_pulldown', 'Lat Pulldown', 'Back', 'Biceps, Rear Delts', 'Cable', 'compound', 'weight_reps',
+        'Thighs locked under the pad, wide overhand grip, slight lean back.',
+        'Pull the bar to the upper chest by driving elbows down, then return slowly to a full stretch.',
+        'Swinging the torso, pulling behind the neck, short range of motion.', 90),
+    _ex('ex_leg_press', '45-Degree Leg Press', 'Quadriceps', 'Glutes, Hamstrings', 'Machine', 'compound', 'weight_reps',
+        'Feet shoulder-width in the middle of the platform, lower back flat against the seat.',
+        'Lower until knees reach about 90 degrees, then press through the whole foot without locking the knees.',
+        'Lower back peeling off the pad, locking the knees hard at the top.', 120),
+    _ex('ex_rdl', 'Romanian Deadlift', 'Hamstrings', 'Glutes, Lower Back', 'Barbell', 'compound', 'weight_reps',
+        'Stand tall with the bar at the hips, soft knees, shoulders back.',
+        'Push the hips back and slide the bar down the thighs until you feel a hamstring stretch, then drive hips forward.',
+        'Squatting the movement, rounding the back, letting the bar drift away.', 120),
+    _ex('ex_pullup', 'Pull-Up', 'Back', 'Biceps, Core', 'Bodyweight', 'compound', 'reps',
+        'Hang from the bar with an overhand grip slightly wider than shoulders, core tight.',
+        'Pull until the chin clears the bar by driving elbows down, then lower to a full hang.',
+        'Kipping, half reps, shrugging the shoulders to the ears.', 120),
+    _ex('ex_db_curl', 'Dumbbell Biceps Curl', 'Biceps', 'Forearms', 'Dumbbells', 'isolation', 'weight_reps',
+        'Stand tall with dumbbells at your sides, palms forward, elbows pinned to the torso.',
+        'Curl up without moving the elbows, squeeze at the top and lower slowly.',
+        'Swinging the body, elbows drifting forward, dropping the weight.', 60),
+    _ex('ex_pushdown', 'Cable Triceps Pushdown', 'Triceps', 'Forearms', 'Cable', 'isolation', 'weight_reps',
+        'Face the cable stack with a rope or bar at chest height, elbows tucked.',
+        'Extend the elbows fully, spreading the rope at the bottom, and return to 90 degrees.',
+        'Elbows flaring, leaning over the weight, partial lockout.', 60),
+    _ex('ex_lateral_raise', 'Dumbbell Lateral Raise', 'Shoulders', 'Upper Traps', 'Dumbbells', 'isolation', 'weight_reps',
+        'Stand with light dumbbells at your sides, slight bend in the elbows.',
+        'Raise the arms out to shoulder height leading with the elbows, then lower under control.',
+        'Using momentum, shrugging, raising above shoulder height.', 60),
+    _ex('ex_goblet_squat', 'Goblet Squat', 'Quadriceps', 'Glutes, Core', 'Dumbbells', 'compound', 'weight_reps',
+        'Hold one dumbbell vertically at the chest, feet slightly wider than hips.',
+        'Sit down between the heels keeping the chest tall, elbows inside the knees, and stand back up.',
+        'Heels lifting, chest collapsing forward, shallow depth.', 90),
+    _ex('ex_lunge', 'Walking Lunge', 'Quadriceps', 'Glutes, Hamstrings', 'Dumbbells', 'compound', 'weight_reps',
+        'Hold dumbbells at your sides, stand tall with a braced core.',
+        'Step forward and lower until both knees are near 90 degrees, then step through into the next rep.',
+        'Front knee caving in, short steps, torso leaning heavily.', 90),
+    _ex('ex_pushup', 'Push-Up', 'Chest', 'Triceps, Front Delts, Core', 'Bodyweight', 'compound', 'reps',
+        'Hands slightly wider than shoulders, body in a straight line from head to heels.',
+        'Lower the chest to just above the floor with elbows at about 45 degrees, then press back up.',
+        'Sagging hips, flared elbows, partial range of motion.', 60),
+    _ex('ex_plank', 'Front Plank', 'Core', 'Shoulders, Glutes', 'Bodyweight', 'isolation', 'time',
+        'Forearms on the floor under the shoulders, legs extended, glutes squeezed.',
+        'Hold a straight line from head to heels while breathing steadily.',
+        'Hips sagging or piking, holding the breath.', 45),
+    _ex('ex_kb_swing', 'Kettlebell Swing', 'Glutes', 'Hamstrings, Core, Shoulders', 'Kettlebell', 'compound', 'weight_reps',
+        'Kettlebell a foot in front of you, hinge and grip with both hands, lats tight.',
+        'Hike the bell back, then snap the hips forward to float it to chest height. Let it fall and hinge again.',
+        'Squatting instead of hinging, lifting with the arms, overextending at the top.', 60),
+    _ex('ex_burpee', 'Burpee', 'Full Body', 'Chest, Quadriceps, Core', 'Bodyweight', 'compound', 'reps',
+        'Stand with feet hip-width apart.',
+        'Squat, place hands down, jump feet back to a plank, return feet, and jump up with arms overhead.',
+        'Sagging hips in the plank, landing with straight knees.', 45),
+    _ex('ex_mountain_climber', 'Mountain Climbers', 'Core', 'Shoulders, Hip Flexors', 'Bodyweight', 'compound', 'time',
+        'High plank with hands under shoulders and a flat back.',
+        'Drive knees toward the chest alternately at a fast, controlled pace.',
+        'Hips bouncing up and down, hands drifting forward.', 45),
+    _ex('ex_jump_squat', 'Jump Squat', 'Quadriceps', 'Glutes, Calves', 'Bodyweight', 'compound', 'reps',
+        'Feet shoulder-width, arms ready to swing.',
+        'Squat to parallel, then jump explosively and land softly back into the next squat.',
+        'Landing stiff-legged, knees caving on landing.', 45),
+    _ex('ex_brisk_walk', 'Brisk Walk', 'Cardio', 'Legs', 'None', 'cardio', 'time',
+        'Upright posture, relaxed shoulders.',
+        'Walk at a pace where you can talk but not sing.',
+        'Starting too fast, slouching.', 0),
+    _ex('ex_jog_interval', 'Jog Interval', 'Cardio', 'Legs', 'None', 'cardio', 'time',
+        'Relaxed arms at 90 degrees, tall posture.',
+        'Jog at a conversational pace, landing softly under the hips.',
+        'Overstriding, running the first interval too fast.', 90),
+    _ex('ex_dead_bug', 'Dead Bug', 'Core', 'Hip Flexors', 'Bodyweight', 'isolation', 'reps',
+        'Lie on your back, arms to the ceiling, hips and knees at 90 degrees, lower back flat.',
+        'Extend opposite arm and leg slowly while keeping the lower back pressed down, then switch sides.',
+        'Lower back arching off the floor, moving too fast.', 45),
+    _ex('ex_glute_bridge', 'Glute Bridge', 'Glutes', 'Hamstrings, Core', 'Bodyweight', 'isolation', 'reps',
+        'Lie on your back with knees bent and feet flat, hip-width apart.',
+        'Drive through the heels to lift the hips until knees, hips and shoulders align. Squeeze, then lower.',
+        'Overarching the lower back, pushing through the toes.', 45),
+    _ex('ex_cat_cow', 'Cat-Cow', 'Spine', 'Core', 'Bodyweight', 'mobility', 'time',
+        'Hands under shoulders and knees under hips on the floor.',
+        'Alternate between rounding the spine up and gently arching it down, moving with the breath.',
+        'Rushing the movement, forcing end range.', 15),
+    _ex('ex_hip_flexor', 'Half-Kneeling Hip Flexor Stretch', 'Hip Flexors', 'Quadriceps', 'Bodyweight', 'mobility', 'time',
+        'Kneel on one knee with the other foot forward, tall torso.',
+        'Tuck the pelvis and shift forward until a stretch is felt at the front of the hip. Switch sides halfway.',
+        'Arching the lower back instead of tucking the pelvis.', 15),
+    _ex('ex_thoracic_rotation', 'Lunge with Thoracic Rotation', 'Spine', 'Hips, Shoulders', 'Bodyweight', 'mobility', 'time',
+        'Step into a deep lunge with both hands inside the front foot.',
+        'Rotate the inside arm up toward the ceiling, follow it with your eyes, then return. Alternate sides.',
+        'Collapsing the back knee, rotating from the lower back only.', 15),
+    _ex('ex_childs_pose', "Child's Pose", 'Back', 'Hips, Shoulders', 'Bodyweight', 'mobility', 'time',
+        'Kneel with big toes together and knees apart.',
+        'Sit the hips back to the heels, reach the arms forward and breathe slowly into the back.',
+        'Holding the breath, forcing the hips down.', 15),
+  ];
+
+  /// workoutId -> list of [exerciseId, sets, reps, rpe, rest].
+  static const Map<String, List<List<Object>>> programme = {
+    'plan_fullbody': [
+      ['ex_goblet_squat', 3, '10', 7.0, 90],
+      ['ex_pushup', 3, '10', 7.0, 60],
+      ['ex_row', 3, '10', 7.0, 90],
+      ['ex_glute_bridge', 3, '12', 7.0, 45],
+      ['ex_plank', 3, '30s', 7.0, 45],
+    ],
+    'plan_push': [
+      ['ex_bench', 4, '6-8', 8.0, 150],
+      ['ex_incline_db', 3, '8-10', 8.0, 90],
+      ['ex_ohp', 3, '8-10', 8.0, 120],
+      ['ex_lateral_raise', 3, '12-15', 8.5, 60],
+      ['ex_pushdown', 3, '10-12', 8.5, 60],
+    ],
+    'plan_pull': [
+      ['ex_deadlift', 3, '5', 8.0, 180],
+      ['ex_pullup', 3, '6-10', 8.0, 120],
+      ['ex_row', 3, '8-10', 8.0, 120],
+      ['ex_lat_pulldown', 3, '10-12', 8.5, 90],
+      ['ex_db_curl', 3, '10-12', 8.5, 60],
+    ],
+    'plan_legs': [
+      ['ex_squat', 4, '6-8', 8.0, 180],
+      ['ex_rdl', 3, '8-10', 8.0, 120],
+      ['ex_leg_press', 3, '10-12', 8.5, 120],
+      ['ex_lunge', 3, '10', 8.0, 90],
+      ['ex_plank', 3, '45s', 8.0, 45],
+    ],
+    'plan_upper_power': [
+      ['ex_bench', 5, '5', 8.5, 180],
+      ['ex_row', 5, '5', 8.5, 150],
+      ['ex_ohp', 3, '5', 8.5, 150],
+      ['ex_pullup', 3, '6', 8.5, 120],
+    ],
+    'plan_hiit': [
+      ['ex_kb_swing', 4, '15', 8.0, 30],
+      ['ex_burpee', 4, '10', 8.5, 30],
+      ['ex_mountain_climber', 4, '30s', 8.5, 30],
+      ['ex_jump_squat', 4, '12', 8.5, 30],
+    ],
+    'plan_c25k': [
+      ['ex_brisk_walk', 1, '300s', 4.0, 0],
+      ['ex_jog_interval', 8, '60s', 7.0, 90],
+      ['ex_brisk_walk', 1, '300s', 4.0, 0],
+    ],
+    'plan_core': [
+      ['ex_plank', 3, '40s', 7.0, 45],
+      ['ex_dead_bug', 3, '10', 7.0, 45],
+      ['ex_glute_bridge', 3, '15', 7.0, 45],
+      ['ex_mountain_climber', 3, '30s', 7.5, 45],
+    ],
+    'plan_mobility': [
+      ['ex_cat_cow', 2, '45s', 3.0, 15],
+      ['ex_thoracic_rotation', 2, '60s', 3.0, 15],
+      ['ex_hip_flexor', 2, '60s', 3.0, 15],
+      ['ex_childs_pose', 2, '60s', 3.0, 15],
+    ],
+  };
+
+  static Future<void> seed(DatabaseExecutor db) async {
+    final batch = db.batch();
+    for (final w in workouts) {
+      batch.insert('workouts', w, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    for (final e in exercises) {
+      batch.insert('exercises', e, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    programme.forEach((workoutId, rows) {
+      for (var i = 0; i < rows.length; i++) {
+        final r = rows[i];
+        batch.insert(
+          'workout_exercises',
+          {
+            'id': '${workoutId}_$i',
+            'workoutId': workoutId,
+            'exerciseId': r[0] as String,
+            'sortOrder': i + 1,
+            'targetSets': r[1] as int,
+            'targetReps': r[2] as String,
+            'targetRpe': r[3] as double,
+            'restSeconds': r[4] as int,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+    await batch.commit(noResult: true);
   }
 }

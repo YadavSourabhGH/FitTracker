@@ -1,95 +1,83 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/utils/metric_formatter.dart';
 
-/// 7-day weekly activity distribution bar chart matching Stitch design.
+/// Seven-day step distribution bars (oldest on the left, today on the right).
 class WeeklyDistributionBars extends StatelessWidget {
-  final int currentSteps;
+  final List<int> values;
+  final List<String> labels;
+  final int goal;
 
-  const WeeklyDistributionBars({super.key, required this.currentSteps});
+  const WeeklyDistributionBars({
+    super.key,
+    required this.values,
+    required this.labels,
+    required this.goal,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final todayIdx = now.weekday % 7; // Sun=0 ... Sat=6
-    const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: List.generate(7, (idx) {
-        final isToday = idx == todayIdx;
-
-        // Real height calculation: 0.1 baseline for empty/future days
-        final double h;
-        if (isToday) {
-          h = currentSteps > 0 ? (currentSteps / 10000).clamp(0.15, 1.0) : 0.12;
-        } else {
-          // Empty baseline for unrecorded days
-          h = 0.10;
-        }
-
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.5),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  height: 70 * h,
-                  decoration: BoxDecoration(
-                    gradient: (isToday && currentSteps > 0)
-                        ? const LinearGradient(
-                            colors: [AppColors.primaryCoralDark, AppColors.primaryCoral],
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                          )
-                        : null,
-                    color: isToday
-                        ? (currentSteps > 0 ? null : AppColors.primaryCoralLight)
-                        : AppColors.surfaceContainer,
-                    borderRadius: BorderRadius.circular(10),
-                    border: isToday && currentSteps == 0
-                        ? Border.all(color: AppColors.primaryCoral.withValues(alpha: 0.5), width: 1.5)
-                        : null,
-                    boxShadow: (isToday && currentSteps > 500)
-                        ? const [
-                            BoxShadow(
-                              color: Color(0x55FF5F25),
-                              blurRadius: 8,
-                              offset: Offset(0, 3),
-                            ),
-                          ]
-                        : null,
+    final maxValue = [goal, ...values].reduce((a, b) => a > b ? a : b);
+    return SizedBox(
+      height: 96,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(values.length, (i) {
+          final v = values[i];
+          final isToday = i == values.length - 1;
+          final hit = v >= goal && goal > 0;
+          final h = maxValue <= 0 ? 0.06 : (v / maxValue).clamp(0.06, 1.0).toDouble();
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (v > 0)
+                    Text(
+                      MetricFormatter.compact(v),
+                      style: AppTypography.labelSmall.copyWith(
+                        fontSize: 8,
+                        color: isToday ? AppColors.primaryCoral : AppColors.textMuted,
+                      ),
+                    ),
+                  const SizedBox(height: 2),
+                  Tooltip(
+                    message: '${labels[i]}: ${MetricFormatter.formatSteps(v)} steps',
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOutCubic,
+                      height: 60 * h,
+                      decoration: BoxDecoration(
+                        gradient: (isToday || hit) && v > 0
+                            ? LinearGradient(
+                                colors: hit
+                                    ? const [AppColors.accentGreen, Color(0xFF2BB58A)]
+                                    : const [AppColors.primaryCoralDark, AppColors.primaryCoral],
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                              )
+                            : null,
+                        color: (isToday || hit) && v > 0 ? null : AppColors.surfaceContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
-                  alignment: Alignment.center,
-                  child: (isToday && currentSteps > 500)
-                      ? RotatedBox(
-                          quarterTurns: 3,
-                          child: Text(
-                            '${(currentSteps / 1000).toStringAsFixed(1)}k',
-                            style: AppTypography.labelSmall.copyWith(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  days[idx],
-                  style: AppTypography.labelSmall.copyWith(
-                    color: isToday ? AppColors.primaryCoral : AppColors.textBody,
-                    fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                  const SizedBox(height: 6),
+                  Text(
+                    labels[i],
+                    style: AppTypography.labelSmall.copyWith(
+                      color: isToday ? AppColors.primaryCoral : AppColors.textBody,
+                      fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 }

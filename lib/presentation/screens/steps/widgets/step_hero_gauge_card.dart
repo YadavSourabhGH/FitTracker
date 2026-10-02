@@ -3,39 +3,40 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../providers/step_providers.dart';
+import '../../../../core/utils/metric_formatter.dart';
+import '../../../common_widgets/ui_kit.dart';
 
-/// Hero step radial dual-ring gauge card matching Stitch design.
+/// Dual-ring gauge: outer = steps vs goal, inner = active kcal vs 400 kcal.
 class StepHeroGaugeCard extends StatelessWidget {
-  final TodayStepState data;
+  final int steps;
+  final int goal;
+  final double activeKcal;
+  final String caption;
 
-  const StepHeroGaugeCard({super.key, required this.data});
+  const StepHeroGaugeCard({
+    super.key,
+    required this.steps,
+    required this.goal,
+    required this.activeKcal,
+    required this.caption,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final pct = goal <= 0 ? 0.0 : (steps / goal).clamp(0.0, 1.0).toDouble();
+    final remaining = goal - steps;
+    return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-      decoration: AppTheme.cardDecoration,
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(LucideIcons.footprints, size: 16, color: AppColors.primaryCoral),
-                  const SizedBox(width: 6),
-                  Text('Daily Activity Goal', style: AppTypography.titleMedium),
-                ],
-              ),
+              const Icon(LucideIcons.footprints, size: 16, color: AppColors.primaryCoral),
+              const SizedBox(width: 6),
+              Expanded(child: Text('Daily Activity Goal', style: AppTypography.titleMedium)),
               Text(
-                '${data.progressPercentage.toInt()}% Completed',
-                style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.primaryCoral,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
+                '${(pct * 100).toInt()}% completed',
+                style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral, fontSize: 13),
               ),
             ],
           ),
@@ -46,32 +47,29 @@ class StepHeroGaugeCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                CustomPaint(
-                  size: const Size(190, 190),
-                  painter: _DualRingPainter(
-                    outerProgress: (data.progressPercentage / 100).clamp(0.0, 1.0),
-                    innerProgress: ((data.activeCalories / 500)).clamp(0.0, 1.0),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: pct),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) => CustomPaint(
+                    size: const Size(190, 190),
+                    painter: _DualRingPainter(
+                      outerProgress: value,
+                      innerProgress: (activeKcal / 400).clamp(0.0, 1.0).toDouble(),
+                    ),
                   ),
                 ),
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryCoralLight,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(LucideIcons.footprints, color: AppColors.primaryCoral, size: 20),
-                    ),
+                    const IconBadge(icon: LucideIcons.footprints, size: 38, iconSize: 20),
                     const SizedBox(height: 6),
                     Text(
-                      '${data.stepCount}',
-                      style: AppTypography.monoNumber(fontSize: 26, fontWeight: FontWeight.w900),
+                      MetricFormatter.formatSteps(steps),
+                      style: AppTypography.monoNumber(fontSize: 26, fontWeight: FontWeight.w800),
                     ),
                     Text(
-                      'STEPS WALKED',
+                      'STEPS',
                       style: AppTypography.labelSmall.copyWith(
                         fontSize: 9,
                         letterSpacing: 0.8,
@@ -81,8 +79,8 @@ class StepHeroGaugeCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Target: ${data.goalSteps}',
-                      style: AppTypography.labelSmall.copyWith(fontSize: 10, color: AppColors.textMuted),
+                      'Goal: ${MetricFormatter.formatSteps(goal)}',
+                      style: AppTypography.labelSmall.copyWith(fontSize: 10),
                     ),
                   ],
                 ),
@@ -90,31 +88,35 @@ class StepHeroGaugeCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primaryCoralLight.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.flag, size: 13, color: AppColors.primaryCoral),
-                const SizedBox(width: 6),
-                Text(
-                  '${data.remainingSteps} steps to reach daily goal',
-                  style: AppTypography.labelSmall.copyWith(
-                    color: AppColors.primaryCoralDark,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+          Pill(
+            icon: remaining > 0 ? LucideIcons.flag : Icons.check,
+            label: remaining > 0
+                ? '${MetricFormatter.formatSteps(remaining)} steps to go - $caption'
+                : 'Goal reached - $caption',
+            background: remaining > 0 ? AppColors.primaryCoralLight : AppColors.accentGreenLight,
+            foreground: remaining > 0 ? AppColors.primaryCoralDark : AppColors.onSecondaryContainer,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _legend(AppColors.primaryCoral, 'Steps'),
+              const SizedBox(width: 16),
+              _legend(AppColors.accentGreen, 'Active kcal (of 400)'),
+            ],
           ),
         ],
       ),
     );
   }
+
+  Widget _legend(Color c, String t) => Row(
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+          const SizedBox(width: 4),
+          Text(t, style: AppTypography.labelSmall.copyWith(color: AppColors.textBody)),
+        ],
+      );
 }
 
 class _DualRingPainter extends CustomPainter {
@@ -127,39 +129,36 @@ class _DualRingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Outer Background Track
     final bgPaint = Paint()
       ..color = AppColors.surfaceContainerHigh
       ..strokeWidth = 12
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..style = PaintingStyle.stroke;
     canvas.drawCircle(center, 80, bgPaint);
 
-    // Outer Active Steps Arc
     final outerPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [AppColors.primaryCoral, AppColors.primaryCoralDark],
-      ).createShader(Rect.fromCircle(center: center, radius: 80))
+      ..shader = const LinearGradient(colors: [AppColors.primaryCoral, AppColors.primaryCoralDark])
+          .createShader(Rect.fromCircle(center: center, radius: 80))
       ..strokeWidth = 12
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: 80), -pi / 2, 2 * pi * outerProgress, false, outerPaint);
+    if (outerProgress > 0) {
+      canvas.drawArc(Rect.fromCircle(center: center, radius: 80), -pi / 2, 2 * pi * outerProgress, false, outerPaint);
+    }
 
-    // Inner Background Track
     final innerBgPaint = Paint()
       ..color = AppColors.surfaceContainer
       ..strokeWidth = 7
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+      ..style = PaintingStyle.stroke;
     canvas.drawCircle(center, 64, innerBgPaint);
 
-    // Inner Active Mint Arc
     final innerPaint = Paint()
       ..color = AppColors.accentGreen
       ..strokeWidth = 7
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: 64), -pi / 2, 2 * pi * innerProgress, false, innerPaint);
+    if (innerProgress > 0) {
+      canvas.drawArc(Rect.fromCircle(center: center, radius: 64), -pi / 2, 2 * pi * innerProgress, false, innerPaint);
+    }
   }
 
   @override

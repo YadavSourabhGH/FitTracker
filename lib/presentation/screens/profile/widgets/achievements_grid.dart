@@ -2,139 +2,151 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../data/models/user_profile_model.dart';
+import '../../../../data/models/achievement.dart';
+import '../../../common_widgets/icon_map.dart';
+import '../../../common_widgets/ui_kit.dart';
 
-/// Achievements row displaying badge icons matching the UI reference.
+/// Horizontal strip of achievement badges with a "view all" sheet.
 class AchievementsGrid extends StatelessWidget {
-  final List<AchievementBadge> achievements;
+  final List<Achievement> achievements;
 
   const AchievementsGrid({super.key, required this.achievements});
 
   @override
   Widget build(BuildContext context) {
+    final unlocked = achievements.where((a) => a.isUnlocked).length;
+    final sorted = [...achievements]..sort((a, b) => b.progress.compareTo(a.progress));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Achievements', style: AppTypography.titleLarge),
-            GestureDetector(
-              onTap: () {},
-              child: Text('View All', style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral)),
-            ),
-          ],
+        SectionHeader(
+          title: 'Achievements',
+          trailing: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Pill(label: '$unlocked/${achievements.length}'),
+          ),
+          actionLabel: 'View all',
+          onAction: () => _showAll(context),
         ),
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: achievements.map((badge) => _badgeTile(badge)).toList(),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: sorted.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (_, i) => _badgeTile(sorted[i]),
+          ),
         ),
-        const SizedBox(height: 20),
+      ],
+    );
+  }
 
-        // Personal Bests Tile
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: AppTheme.cardDecoration,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  void _showAll(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Personal Bests', style: AppTypography.titleMedium),
-                  Text('View All', style: AppTypography.labelSmall.copyWith(color: AppColors.primaryCoral)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _prMetric('Bench Press', '100 kg'),
-                  Container(width: 1, height: 28, color: AppColors.cardBorder),
-                  _prMetric('Back Squat', '140 kg'),
-                  Container(width: 1, height: 28, color: AppColors.cardBorder),
-                  _prMetric('Deadlift', '180 kg'),
-                ],
+              Text('Achievements', style: AppTypography.headlineMedium),
+              const SizedBox(height: 12),
+              ...achievements.map(
+                (a) => Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Row(
+                    children: [
+                      _icon(a, 46),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(a.title, style: AppTypography.titleMedium),
+                            Text(a.description, style: AppTypography.bodyMedium),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: a.progress,
+                                minHeight: 5,
+                                backgroundColor: AppColors.surfaceContainerHigh,
+                                valueColor: AlwaysStoppedAnimation(
+                                  a.isUnlocked ? AppColors.accentGreen : AppColors.primaryCoral,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(a.progressLabel, style: AppTypography.labelSmall),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _badgeTile(AchievementBadge badge) {
-    final isUnlocked = badge.isUnlocked;
-    Color iconColor;
-    Color bgColor;
-
-    switch (badge.iconName) {
-      case 'flame':
-        iconColor = AppColors.primaryCoral;
-        bgColor = AppColors.primaryCoralLight;
-        break;
-      case 'shoe':
-        iconColor = AppColors.accentGreen;
-        bgColor = AppColors.accentGreenLight;
-        break;
-      case 'droplet':
-        iconColor = AppColors.accentBlue;
-        bgColor = AppColors.accentBlueLight;
-        break;
-      case 'target':
-        iconColor = AppColors.accentPurple;
-        bgColor = AppColors.accentPurpleLight;
-        break;
-      default:
-        iconColor = AppColors.textMuted;
-        bgColor = const Color(0xFFF3EFEA);
-    }
-
-    return Column(
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isUnlocked ? iconColor.withValues(alpha: 0.3) : AppColors.cardBorder,
-              width: 1.5,
-            ),
-          ),
-          child: Icon(
-            isUnlocked ? _resolveIcon(badge.iconName) : LucideIcons.lock,
-            color: iconColor,
-            size: 22,
-          ),
+  Widget _icon(Achievement a, double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: a.isUnlocked ? AppColors.primaryCoralLight : AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(size * 0.3),
+        border: Border.all(
+          color: a.isUnlocked ? AppColors.primaryCoral.withValues(alpha: 0.4) : AppColors.cardBorder,
+          width: 1.5,
         ),
-        const SizedBox(height: 6),
-        Text(badge.title, style: AppTypography.monoNumber(fontSize: 10, fontWeight: FontWeight.w700)),
-        Text(badge.subtitle, style: AppTypography.labelSmall.copyWith(fontSize: 8)),
-      ],
+      ),
+      child: Icon(
+        a.isUnlocked ? iconForName(a.iconName) : LucideIcons.lock,
+        color: a.isUnlocked ? AppColors.primaryCoral : AppColors.textMuted,
+        size: size * 0.42,
+      ),
     );
   }
 
-  IconData _resolveIcon(String name) {
-    switch (name) {
-      case 'flame': return LucideIcons.flame;
-      case 'shoe': return LucideIcons.footprints;
-      case 'droplet': return LucideIcons.droplets;
-      case 'target': return LucideIcons.target;
-      default: return LucideIcons.award;
-    }
-  }
-
-  Widget _prMetric(String lift, String weight) {
-    return Column(
-      children: [
-        Text(lift, style: AppTypography.labelSmall),
-        const SizedBox(height: 2),
-        Text(weight, style: AppTypography.monoNumber(fontSize: 13, fontWeight: FontWeight.w700)),
-      ],
+  Widget _badgeTile(Achievement a) {
+    return SizedBox(
+      width: 68,
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: CircularProgressIndicator(
+                  value: a.progress,
+                  strokeWidth: 3,
+                  backgroundColor: AppColors.surfaceContainerHigh,
+                  valueColor: AlwaysStoppedAnimation(a.isUnlocked ? AppColors.accentGreen : AppColors.primaryCoral),
+                ),
+              ),
+              _icon(a, 44),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            a.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.labelSmall.copyWith(fontSize: 9, color: AppColors.textHeadline),
+          ),
+        ],
+      ),
     );
   }
 }

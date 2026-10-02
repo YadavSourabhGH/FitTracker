@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_typography.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/app_typography.dart';
+import '../../../../core/utils/metric_formatter.dart';
 import '../../../common_widgets/circular_gauge.dart';
+import '../../../common_widgets/ui_kit.dart';
 import 'weekly_distribution_bars.dart';
 
-/// Goal Progress Card from Stitch: Radial gauge, On Track badge, & weekly distribution bars.
+/// Daily step goal gauge with the last seven days of activity.
 class GoalProgressCard extends StatelessWidget {
   final int currentSteps;
   final int targetSteps;
   final double percentage;
   final int streakDays;
+  final List<int> weekValues;
+  final List<String> weekLabels;
+  final VoidCallback onEditGoal;
 
   const GoalProgressCard({
     super.key,
@@ -19,60 +24,42 @@ class GoalProgressCard extends StatelessWidget {
     required this.targetSteps,
     required this.percentage,
     required this.streakDays,
+    required this.weekValues,
+    required this.weekLabels,
+    required this.onEditGoal,
   });
 
   @override
   Widget build(BuildContext context) {
     final remaining = (targetSteps - currentSteps) > 0 ? (targetSteps - currentSteps) : 0;
+    final avg = weekValues.isEmpty ? 0 : weekValues.reduce((a, b) => a + b) ~/ weekValues.length;
+    final reached = percentage >= 100;
 
-    return Container(
+    return AppCard(
       padding: const EdgeInsets.all(18),
-      decoration: AppTheme.cardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Text('Goal Progress', style: AppTypography.titleLarge),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryCoralLight,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(LucideIcons.flame, size: 12, color: AppColors.primaryCoral),
-                        const SizedBox(width: 3),
-                        Text(
-                          '$streakDays Day Streak',
-                          style: AppTypography.labelSmall.copyWith(
-                            color: AppColors.primaryCoralDark,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+              Text('Goal Progress', style: AppTypography.titleLarge),
+              const SizedBox(width: 8),
+              Pill(label: '$streakDays day streak', icon: LucideIcons.flame),
+              const Spacer(),
+              InkWell(
+                onTap: onEditGoal,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Text(
+                    'Edit goal',
+                    style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral, fontSize: 12),
                   ),
-                ],
-              ),
-              Text(
-                'Edit goal',
-                style: AppTypography.titleMedium.copyWith(
-                  color: AppColors.primaryCoral,
-                  fontSize: 12,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-
-          // Inner Radial Gauge Box
           Container(
             padding: const EdgeInsets.all(14),
             decoration: AppTheme.innerContainerDecoration,
@@ -82,6 +69,7 @@ class GoalProgressCard extends StatelessWidget {
                   percentage: percentage,
                   size: 84,
                   strokeWidth: 9,
+                  progressColor: reached ? AppColors.accentGreen : AppColors.primaryCoral,
                   centerText: '${percentage.toInt()}%',
                 ),
                 const SizedBox(width: 14),
@@ -89,33 +77,10 @@ class GoalProgressCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentGreenLight,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: percentage >= 100 ? AppColors.accentGreen : (percentage > 0 ? AppColors.primaryCoral : AppColors.textBody),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              percentage >= 100 ? 'Goal Reached' : (percentage > 0 ? 'On Track' : 'Get Started'),
-                              style: AppTypography.labelSmall.copyWith(
-                                color: AppColors.onSecondaryContainer,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                      Pill(
+                        label: reached ? 'Goal reached' : (currentSteps > 0 ? 'In progress' : 'Get started'),
+                        background: reached ? AppColors.accentGreenLight : AppColors.surfaceContainerHigh,
+                        foreground: reached ? AppColors.onSecondaryContainer : AppColors.textBody,
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -129,11 +94,11 @@ class GoalProgressCard extends StatelessWidget {
                       const SizedBox(height: 1),
                       RichText(
                         text: TextSpan(
-                          text: '$currentSteps ',
+                          text: '${MetricFormatter.formatSteps(currentSteps)} ',
                           style: AppTypography.monoNumber(fontSize: 16, fontWeight: FontWeight.w800),
                           children: [
                             TextSpan(
-                              text: '/ $targetSteps',
+                              text: '/ ${MetricFormatter.formatSteps(targetSteps)}',
                               style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
                             ),
                           ],
@@ -142,13 +107,21 @@ class GoalProgressCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(LucideIcons.flag, size: 12, color: AppColors.primaryCoral),
+                          Icon(
+                            reached ? Icons.check_circle_outline : LucideIcons.flag,
+                            size: 12,
+                            color: reached ? AppColors.accentGreen : AppColors.primaryCoral,
+                          ),
                           const SizedBox(width: 4),
-                          Text(
-                            remaining > 0 ? '$remaining steps left' : 'Goal achieved!',
-                            style: AppTypography.labelSmall.copyWith(
-                              color: AppColors.primaryCoral,
-                              fontWeight: FontWeight.w600,
+                          Flexible(
+                            child: Text(
+                              reached
+                                  ? 'Goal achieved today'
+                                  : '${MetricFormatter.formatSteps(remaining)} steps left',
+                              style: AppTypography.labelSmall.copyWith(
+                                color: reached ? AppColors.accentGreen : AppColors.primaryCoral,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -160,17 +133,12 @@ class GoalProgressCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Weekly Distribution Bar Section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Text('Last 7 days', style: AppTypography.labelSmall.copyWith(color: AppColors.textBody)),
               Text(
-                'Weekly Distribution',
-                style: AppTypography.labelSmall.copyWith(color: AppColors.textBody),
-              ),
-              Text(
-                currentSteps > 0 ? 'Avg ${(currentSteps / 1000).toStringAsFixed(1)}k / day' : 'Avg 0 / day',
+                'Avg ${MetricFormatter.compact(avg)} / day',
                 style: AppTypography.labelSmall.copyWith(
                   color: AppColors.primaryCoral,
                   fontWeight: FontWeight.w700,
@@ -178,11 +146,10 @@ class GoalProgressCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          WeeklyDistributionBars(currentSteps: currentSteps),
+          const SizedBox(height: 8),
+          WeeklyDistributionBars(values: weekValues, labels: weekLabels, goal: targetSteps),
         ],
       ),
     );
   }
 }
-

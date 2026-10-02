@@ -3,56 +3,64 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/fitness_calc.dart';
 import '../../../data/models/workout_model.dart';
+import '../../common_widgets/ui_kit.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/workout_providers.dart';
 import 'active_workout_screen.dart';
 
-/// Screen displaying the ordered exercises and biomechanics of a workout plan.
-class WorkoutDetailScreen extends ConsumerWidget {
+/// Ordered exercise list, technique cues and session start.
+class WorkoutDetailScreen extends ConsumerStatefulWidget {
   final Workout workout;
 
   const WorkoutDetailScreen({super.key, required this.workout});
 
-  void _startWorkout(BuildContext context, WidgetRef ref) async {
-    await ref.read(activeWorkoutProvider.notifier).startWorkout(workout);
+  @override
+  ConsumerState<WorkoutDetailScreen> createState() => _WorkoutDetailScreenState();
+}
 
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ActiveWorkoutScreen()),
-    );
+class _WorkoutDetailScreenState extends ConsumerState<WorkoutDetailScreen> {
+  bool _starting = false;
+
+  Future<void> _start() async {
+    final active = ref.read(activeWorkoutProvider);
+    if (active != null && active.workout.id != widget.workout.id) {
+      final replace = await confirmDialog(
+        context,
+        title: 'Replace current workout?',
+        message: '"${active.workout.title}" is still in progress. Starting a new session discards its unsaved sets.',
+        confirmLabel: 'Start new',
+        destructive: true,
+      );
+      if (!replace) return;
+    }
+    setState(() => _starting = true);
+    try {
+      await ref.read(activeWorkoutProvider.notifier).start(widget.workout);
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const ActiveWorkoutScreen()));
+    } catch (e) {
+      if (mounted) showAppSnack(context, 'Could not start workout: $e');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final workout = widget.workout;
+    final weight = ref.watch(settingsProvider).weightKg;
+    final active = ref.watch(activeWorkoutProvider);
+    final resuming = active != null && active.workout.id == workout.id;
+    final kcal = FitnessCalc.metKcal(
+      FitnessCalc.metForCategory(workout.category),
+      weight,
+      workout.estimatedMinutes * 60,
+    );
+
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBase,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textHeadline),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: const BoxDecoration(color: AppColors.primaryCoralLight, shape: BoxShape.circle),
-              child: const Icon(LucideIcons.flame, color: AppColors.primaryCoral, size: 15),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                workout.title,
-                style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
+      appBar: AppBar(title: Text(workout.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: SafeArea(
         child: Column(
           children: [
@@ -62,38 +70,42 @@ class WorkoutDetailScreen extends ConsumerWidget {
                 children: [
                   Text(workout.description, style: AppTypography.bodyLarge),
                   const SizedBox(height: 14),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      _badge('${workout.estimatedMinutes} mins', LucideIcons.clock),
-                      const SizedBox(width: 8),
+                      _badge('${workout.estimatedMinutes} min', LucideIcons.clock),
                       _badge(workout.difficulty, LucideIcons.trendingUp),
-                      const SizedBox(width: 8),
-                      _badge('${workout.exercises.length} Exercises', LucideIcons.dumbbell),
+                      _badge('${workout.exercises.length} exercises', LucideIcons.dumbbell),
+                      _badge('~${kcal.round()} kcal', LucideIcons.flame),
                     ],
                   ),
                   const SizedBox(height: 20),
                   Text('Exercises', style: AppTypography.titleLarge),
                   const SizedBox(height: 10),
-                  ...workout.exercises.map((we) => _exerciseItem(context, we)),
+                  ...workout.exercises.asMap().entries.map((e) => _exerciseItem(e.key + 1, e.value)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Calorie estimate uses MET values for ${workout.category.toLowerCase()} training and your body weight.',
+                    style: AppTypography.labelSmall,
+                  ),
                 ],
               ),
             ),
-
-            // Start Workout Button
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryCoral,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                onPressed: () => _startWorkout(context, ref),
-                icon: const Icon(LucideIcons.play, color: Colors.white, size: 18),
-                label: Text(
-                  'Start Workout Session',
-                  style: AppTypography.titleMedium.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _starting || workout.exercises.isEmpty ? null : _start,
+                  icon: _starting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(LucideIcons.play, color: Colors.white, size: 18),
+                  label: Text(resuming ? 'Resume session' : 'Start workout session'),
                 ),
               ),
             ),
@@ -102,7 +114,6 @@ class WorkoutDetailScreen extends ConsumerWidget {
       ),
     );
   }
-
 
   Widget _badge(String text, IconData icon) {
     return Container(
@@ -123,18 +134,18 @@ class WorkoutDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _exerciseItem(BuildContext context, WorkoutExercise we) {
+  Widget _exerciseItem(int number, WorkoutExercise we) {
     final ex = we.exercise;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      decoration: AppTheme.cardDecoration,
+      onTap: () => showExerciseInfo(context, ex),
       child: Row(
         children: [
           CircleAvatar(
             radius: 16,
             backgroundColor: AppColors.primaryCoralLight,
-            child: Text('${we.sortOrder}', style: AppTypography.monoNumber(fontSize: 12, color: AppColors.primaryCoral)),
+            child: Text('$number', style: AppTypography.monoNumber(fontSize: 12, color: AppColors.primaryCoral)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -144,49 +155,70 @@ class WorkoutDetailScreen extends ConsumerWidget {
                 Text(ex.name, style: AppTypography.titleMedium),
                 const SizedBox(height: 2),
                 Text(
-                  '${we.targetSets} sets × ${we.targetReps} reps • ${ex.muscleGroup}',
+                  '${we.targetLabel} - ${ex.muscleGroup} - rest ${we.restSeconds}s',
                   style: AppTypography.bodyMedium.copyWith(fontSize: 11),
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.info, color: AppColors.textMuted, size: 20),
-            onPressed: () => _showFormCues(context, ex),
-          ),
+          const Icon(LucideIcons.info, color: AppColors.textMuted, size: 20),
         ],
       ),
     );
   }
+}
 
-  void _showFormCues(BuildContext context, Exercise ex) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+/// Technique cues bottom sheet.
+void showExerciseInfo(BuildContext context, Exercise ex) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           children: [
             Text(ex.name, style: AppTypography.headlineMedium),
             const SizedBox(height: 4),
-            Text('Target: ${ex.muscleGroup} (Secondary: ${ex.secondaryMuscles})', style: AppTypography.bodyMedium),
+            Text(
+              'Primary: ${ex.muscleGroup}${ex.secondaryMuscles.isEmpty ? '' : ' - Secondary: ${ex.secondaryMuscles}'}',
+              style: AppTypography.bodyMedium,
+            ),
+            const SizedBox(height: 4),
+            Text('Equipment: ${ex.equipment}', style: AppTypography.bodyMedium),
             const SizedBox(height: 16),
-            Text('Setup Cues', style: AppTypography.titleMedium),
-            Text(ex.setupInstructions, style: AppTypography.bodyLarge),
-            const SizedBox(height: 12),
-            Text('Execution & Form', style: AppTypography.titleMedium),
-            Text(ex.executionInstructions, style: AppTypography.bodyLarge),
-            const SizedBox(height: 12),
-            Text('Common Mistakes to Avoid', style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral)),
-            Text(ex.commonMistakes, style: AppTypography.bodyLarge),
-            const SizedBox(height: 16),
+            _cue('Setup', ex.setupInstructions, LucideIcons.target),
+            _cue('Execution', ex.executionInstructions, LucideIcons.activity),
+            _cue('Common mistakes', ex.commonMistakes, Icons.warning_amber_rounded, color: AppColors.accentPink),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+Widget _cue(String title, String body, IconData icon, {Color color = AppColors.primaryCoral}) {
+  if (body.isEmpty) return const SizedBox.shrink();
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTypography.titleMedium.copyWith(color: color)),
+              const SizedBox(height: 2),
+              Text(body, style: AppTypography.bodyLarge),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

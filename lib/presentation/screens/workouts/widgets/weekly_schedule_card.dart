@@ -1,69 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/date_keys.dart';
+import '../../../../data/models/workout_model.dart';
+import '../../../common_widgets/ui_kit.dart';
+import '../../../providers/workout_providers.dart';
+import '../workout_detail_screen.dart';
 
-/// Weekly routine schedule list card matching FitTrackr design.
-class WeeklyScheduleCard extends StatelessWidget {
+enum _Status { completed, ready, upcoming, missed, rest }
+
+/// Weekly plan (Monday to Sunday) with real completion status.
+class WeeklyScheduleCard extends ConsumerWidget {
   const WeeklyScheduleCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final todayWeekday = now.weekday; // 1 = Mon ... 7 = Sun
-    final routineRosters = [
-      {'day': 'MON', 'title': 'Upper Body Hypertrophy', 'sub': '40 min • Chest & Back', 'dayNum': 1},
-      {'day': 'TUE', 'title': 'HIIT Core Blast', 'sub': '30 min • High Intensity', 'dayNum': 2},
-      {'day': 'WED', 'title': 'Functional Leg Power', 'sub': '45 min • Quads & Glutes', 'dayNum': 3},
-      {'day': 'THU', 'title': 'Active Recovery & Mobility', 'sub': '20 min • Gentle Flow', 'dayNum': 4},
-      {'day': 'FRI', 'title': 'Full Body Metabolic Circuit', 'sub': '35 min • Strength & Cardio', 'dayNum': 5},
-      {'day': 'SAT', 'title': 'Weekend Outdoor Trail', 'sub': '45 min • Cardio & Endurance', 'dayNum': 6},
-      {'day': 'SUN', 'title': 'Rest & Bodyweight Stretch', 'sub': '20 min • Full Rest', 'dayNum': 7},
-    ];
+  Widget build(BuildContext context, WidgetRef ref) {
+    final schedule = ref.watch(scheduleProvider).value ?? const <int, String>{};
+    final workouts = ref.watch(allWorkoutsProvider).value ?? const <Workout>[];
+    final sessions = ref.watch(weekSessionsProvider).value ?? const <WorkoutSession>[];
+    final byId = {for (final w in workouts) w.id: w};
+    final doneDays = sessions.map((s) => s.startTime.weekday).toSet();
+    final today = DateTime.now().weekday;
+    final monday = DateKeys.startOfWeek(DateTime.now());
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.cardDecoration,
+    return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(LucideIcons.calendar, size: 16, color: AppColors.accentGreen),
-                  const SizedBox(width: 6),
-                  Text('Weekly Routine Schedule', style: AppTypography.titleMedium),
-                ],
-              ),
-              Text(
-                'Adjust Plan',
-                style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral, fontSize: 12),
-              ),
-            ],
+          SectionHeader(
+            title: 'Weekly Plan',
+            icon: LucideIcons.calendar,
+            actionLabel: 'Adjust plan',
+            onAction: () => showScheduleEditor(context, ref),
           ),
           const SizedBox(height: 12),
-          ...routineRosters.map((r) {
-            final dayNum = r['dayNum'] as int;
-            final isToday = dayNum == todayWeekday;
-            final isPast = dayNum < todayWeekday;
-            final rawSub = r['sub'] as String;
-            final day = r['day'] as String;
-            final title = r['title'] as String;
-
-            final status = isToday
-                ? _Status.ready
-                : (isPast ? _Status.rest : _Status.upcoming);
-
-            final subText = isToday
-                ? "Today's Focus • ${rawSub.split('•').first.trim()}"
-                : (isPast ? "Rest • ${rawSub.split('•').last.trim()}" : rawSub);
-
+          ...List.generate(7, (i) {
+            final weekday = i + 1;
+            final id = schedule[weekday] ?? 'rest';
+            final w = byId[id];
+            final date = DateTime(monday.year, monday.month, monday.day + i);
+            final _Status status;
+            if (doneDays.contains(weekday)) {
+              status = _Status.completed;
+            } else if (w == null) {
+              status = _Status.rest;
+            } else if (weekday == today) {
+              status = _Status.ready;
+            } else if (weekday < today) {
+              status = _Status.missed;
+            } else {
+              status = _Status.upcoming;
+            }
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: _item(day, title, subText, status),
+              child: _item(context, DateKeys.weekdayShort[i].toUpperCase(), date, w, status),
             );
           }),
         ],
@@ -71,94 +63,167 @@ class WeeklyScheduleCard extends StatelessWidget {
     );
   }
 
-  Widget _item(String day, String title, String sub, _Status status) {
+  Widget _item(BuildContext context, String day, DateTime date, Workout? w, _Status status) {
     final isReady = status == _Status.ready;
     final isDone = status == _Status.completed;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: isReady ? AppColors.primaryCoralLight.withValues(alpha: 0.4) : AppColors.surfaceContainerLow,
+    return Material(
+      color: isReady ? AppColors.primaryCoralLight.withValues(alpha: 0.4) : AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        border: isReady ? Border.all(color: AppColors.primaryCoral.withValues(alpha: 0.3), width: 1) : null,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: isReady
-                  ? AppColors.primaryCoral
-                  : (isDone ? AppColors.accentGreenLight : AppColors.surfaceContainer),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              day,
-              style: AppTypography.monoNumber(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: isReady ? Colors.white : (isDone ? AppColors.onSecondaryContainer : AppColors.textBody),
-              ),
-            ),
+        onTap: w == null
+            ? null
+            : () => Navigator.push(context, MaterialPageRoute(builder: (_) => WorkoutDetailScreen(workout: w))),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: isReady ? Border.all(color: AppColors.primaryCoral.withValues(alpha: 0.3)) : null,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.titleMedium.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: isReady ? AppColors.primaryCoral : (isDone ? AppColors.accentGreenLight : AppColors.surfaceContainer),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                Text(
-                  sub,
-                  style: AppTypography.labelSmall.copyWith(fontSize: 10, color: AppColors.textBody),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      day,
+                      style: AppTypography.monoNumber(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: isReady ? Colors.white : (isDone ? AppColors.onSecondaryContainer : AppColors.textBody),
+                      ),
+                    ),
+                    Text(
+                      '${date.day}',
+                      style: AppTypography.labelSmall.copyWith(
+                        fontSize: 9,
+                        color: isReady ? Colors.white : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      w?.title ?? 'Rest & recovery',
+                      style: AppTypography.titleMedium.copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      w == null ? 'Light walk or stretching' : '${w.estimatedMinutes} min - ${w.category}',
+                      style: AppTypography.labelSmall.copyWith(fontSize: 10, color: AppColors.textBody),
+                    ),
+                  ],
+                ),
+              ),
+              _badge(status),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _badge(_Status status) {
+    switch (status) {
+      case _Status.completed:
+        return const Pill(
+          label: 'Done',
+          icon: Icons.check,
+          background: AppColors.accentGreenLight,
+          foreground: AppColors.onSecondaryContainer,
+        );
+      case _Status.ready:
+        return const Pill(label: 'Today', icon: LucideIcons.play, background: Colors.white);
+      case _Status.missed:
+        return const Pill(label: 'Missed', background: AppColors.surfaceContainer, foreground: AppColors.textMuted);
+      case _Status.rest:
+        return const Pill(label: 'Rest', background: AppColors.surfaceContainer, foreground: AppColors.textBody);
+      case _Status.upcoming:
+        return const Pill(label: 'Upcoming', background: AppColors.surfaceContainerHigh, foreground: AppColors.textBody);
+    }
+  }
+}
+
+/// Lets the user assign a workout (or rest) to each weekday.
+Future<void> showScheduleEditor(BuildContext context, WidgetRef ref) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => Consumer(
+      builder: (ctx, ref, _) {
+        final schedule = ref.watch(scheduleProvider).value ?? const <int, String>{};
+        final workouts = ref.watch(allWorkoutsProvider).value ?? const <Workout>[];
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              children: [
+                Text('Adjust weekly plan', style: AppTypography.headlineMedium),
+                const SizedBox(height: 4),
+                Text('Choose a workout or a rest day for each weekday.', style: AppTypography.bodyMedium),
+                const SizedBox(height: 12),
+                ...List.generate(7, (i) {
+                  final weekday = i + 1;
+                  final current = schedule[weekday] ?? 'rest';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 44,
+                          child: Text(DateKeys.weekdayShort[i], style: AppTypography.titleMedium),
+                        ),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: workouts.any((w) => w.id == current) ? current : 'rest',
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: 'rest', child: Text('Rest day')),
+                              ...workouts.map(
+                                (w) => DropdownMenuItem(
+                                  value: w.id,
+                                  child: Text(w.title, overflow: TextOverflow.ellipsis),
+                                ),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) ref.read(scheduleProvider.notifier).setDay(weekday, v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
                 ),
               ],
             ),
           ),
-          _statusBadge(status),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusBadge(_Status status) {
-    if (status == _Status.completed) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: AppColors.accentGreenLight, borderRadius: BorderRadius.circular(10)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.check, size: 12, color: AppColors.onSecondaryContainer),
-          const SizedBox(width: 3),
-          Text('Completed', style: AppTypography.labelSmall.copyWith(color: AppColors.onSecondaryContainer, fontWeight: FontWeight.w700, fontSize: 10)),
-        ]),
-      );
-    }
-    if (status == _Status.ready) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: AppColors.cardSurface, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Color(0x22FF5F25), blurRadius: 4, offset: Offset(0, 1))]),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(LucideIcons.play, size: 10, color: AppColors.primaryCoral),
-          const SizedBox(width: 4),
-          Text('Ready to start', style: AppTypography.labelSmall.copyWith(color: AppColors.primaryCoral, fontWeight: FontWeight.w800, fontSize: 10)),
-        ]),
-      );
-    }
-    final isRest = status == _Status.rest;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: isRest ? AppColors.surfaceContainer : AppColors.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)),
-      child: Text(isRest ? 'Rest' : 'Upcoming', style: AppTypography.labelSmall.copyWith(color: AppColors.textBody, fontSize: 10, fontWeight: FontWeight.w600)),
-    );
-  }
+        );
+      },
+    ),
+  );
 }
-
-enum _Status { completed, ready, upcoming, rest }

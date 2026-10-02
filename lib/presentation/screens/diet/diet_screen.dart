@@ -1,175 +1,279 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/date_keys.dart';
+import '../../../core/utils/metric_formatter.dart';
 import '../../../data/models/nutrition_model.dart';
-import '../../../data/repositories/nutrition_repository.dart';
+import '../../../data/models/user_settings.dart';
+import '../../common_widgets/fittrackr_header.dart';
+import '../../common_widgets/ui_kit.dart';
+import '../../providers/app_providers.dart';
+import '../../providers/nutrition_providers.dart';
 import 'food_search_modal.dart';
 import 'widgets/daily_calorie_card.dart';
 import 'widgets/diet_suggestions_view.dart';
 
-/// Screen managing daily calories, macronutrient splits, logged meals, and diet suggestions.
-class DietScreen extends StatefulWidget {
+/// Diet tab: meal logging by day and nutrition guidance.
+class DietScreen extends ConsumerStatefulWidget {
   const DietScreen({super.key});
 
   @override
-  State<DietScreen> createState() => _DietScreenState();
+  ConsumerState<DietScreen> createState() => _DietScreenState();
 }
 
-class _DietScreenState extends State<DietScreen> {
-  final _repository = NutritionRepository();
-  List<NutritionItem> _loggedFoods = [];
-  int _selectedTab = 0; // 0: Track Meals, 1: Diet Suggestions
-  bool _isLoading = true;
-
-  String get _today => DateTime.now().toIso8601String().substring(0, 10);
-  double get totalCalories => _loggedFoods.fold(0, (sum, i) => sum + i.calories);
-  double get totalProtein => _loggedFoods.fold(0, (sum, i) => sum + i.proteinGrams);
-  double get totalCarbs => _loggedFoods.fold(0, (sum, i) => sum + i.carbsGrams);
-  double get totalFat => _loggedFoods.fold(0, (sum, i) => sum + i.fatGrams);
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMeals();
-  }
-
-  Future<void> _loadMeals() async {
-    final meals = await _repository.getLoggedMeals(_today);
-    if (mounted) setState(() { _loggedFoods = meals; _isLoading = false; });
-  }
-
-  void _addFood(NutritionItem food) async {
-    final item = NutritionItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: food.name,
-      brand: food.brand,
-      servingSize: food.servingSize,
-      servingUnit: food.servingUnit,
-      calories: food.calories,
-      proteinGrams: food.proteinGrams,
-      carbsGrams: food.carbsGrams,
-      fatGrams: food.fatGrams,
-      mealType: food.mealType,
-    );
-    await _repository.addMeal(item, _today);
-    _loadMeals();
-  }
-
-  void _openSearch([String? initialQuery]) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => FoodSearchModal(onFoodSelected: _addFood),
-    );
-  }
+class _DietScreenState extends ConsumerState<DietScreen> {
+  int _tab = 0;
+  final Set<String> _hidden = {};
 
   @override
   Widget build(BuildContext context) {
-    const targetCalories = 2450.0;
+    final settings = ref.watch(settingsProvider);
+    final day = ref.watch(dietDateProvider);
+    final mealsAsync = ref.watch(mealsForDateProvider(day));
+    final meals = (mealsAsync.value ?? const <NutritionItem>[]).where((m) => !_hidden.contains(m.id)).toList();
+
+    double sum(double Function(NutritionItem) f) => meals.fold(0.0, (a, m) => a + f(m));
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBase,
-      appBar: AppBar(title: Text('Nutrition & Diet', style: AppTypography.headlineMedium)),
+      floatingActionButton: _tab == 0
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 96),
+              child: FloatingActionButton.extended(
+                heroTag: 'add_food',
+                backgroundColor: AppColors.primaryCoral,
+                foregroundColor: Colors.white,
+                onPressed: () => showFoodSearch(context, ref, day),
+                icon: const Icon(LucideIcons.plus),
+                label: const Text('Add food'),
+              ),
+            )
+          : null,
       body: SafeArea(
+        bottom: false,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           children: [
+            const FitTrackrHeader(subtitle: 'Nutrition'),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.cardBorder)),
-              child: Row(children: [_tabBtn(0, 'Track Meals', LucideIcons.utensils), _tabBtn(1, 'Diet Suggestions', LucideIcons.sparkles)]),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: Row(
+                children: [
+                  _tabBtn(0, 'Track Meals', LucideIcons.utensils),
+                  _tabBtn(1, 'Diet Suggestions', LucideIcons.sparkles),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            if (_selectedTab == 0) ...[
+            const SizedBox(height: 14),
+            if (_tab == 0) ...[
+              _dateSwitcher(day),
+              const SizedBox(height: 12),
               DailyCalorieCard(
-                targetCalories: targetCalories,
-                totalCalories: totalCalories,
-                totalProtein: totalProtein,
-                totalCarbs: totalCarbs,
-                totalFat: totalFat,
+                targets: settings.macroTargets,
+                totalCalories: sum((m) => m.calories),
+                totalProtein: sum((m) => m.proteinGrams),
+                totalCarbs: sum((m) => m.carbsGrams),
+                totalFat: sum((m) => m.fatGrams),
+                goalLabel: settings.goal.label,
               ),
               const SizedBox(height: 16),
-              _buildMealsHeader(),
-              const SizedBox(height: 12),
-              if (_isLoading)
-                const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: AppColors.primaryCoral)))
-              else if (_loggedFoods.isEmpty)
-                _emptyState()
-              else
-                ..._loggedFoods.map((f) => _foodTile(f)),
-            ] else ...[
-              DietSuggestionsView(onAddFoodQuery: (food) => _openSearch(food)),
-            ],
+              mealsAsync.when(
+                data: (_) => meals.isEmpty
+                    ? EmptyState(
+                        icon: LucideIcons.utensilsCrossed,
+                        title: DateKeys.isToday(day) ? 'No meals logged today' : 'No meals logged on this day',
+                        message: 'Pick from common foods, your recent foods or search Open Food Facts.',
+                        actionLabel: 'Log a meal',
+                        onAction: () => showFoodSearch(context, ref, day),
+                      )
+                    : Column(children: _mealGroups(meals)),
+                loading: () => const LoadingBlock(),
+                error: (e, _) => ErrorCard(
+                  message: 'Could not load meals.',
+                  onRetry: () => ref.invalidate(mealsForDateProvider(day)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Targets: BMR ${settings.bmr.round()} kcal x ${settings.activityLevel.multiplier} activity '
+                '= TDEE ${settings.tdee.round()} kcal, ${settings.goal.calorieAdjustment >= 0 ? '+' : ''}'
+                '${settings.goal.calorieAdjustment} kcal for "${settings.goal.label}".',
+                style: AppTypography.labelSmall,
+              ),
+            ] else
+              DietSuggestionsView(
+                goal: settings.goal,
+                onAddFoodQuery: (food) {
+                  setState(() => _tab = 0);
+                  showFoodSearch(context, ref, DateKeys.today(), initialQuery: food);
+                },
+              ),
+            const SizedBox(height: 170),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMealsHeader() {
-    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Text('Logged Meals', style: AppTypography.titleLarge),
-      ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(minimumSize: const Size(110, 36), padding: const EdgeInsets.symmetric(horizontal: 12)),
-        onPressed: () => _openSearch(),
-        icon: const Icon(LucideIcons.plus, size: 14),
-        label: Text('Add Food', style: AppTypography.labelSmall.copyWith(color: Colors.white)),
-      ),
-    ]);
+  List<Widget> _mealGroups(List<NutritionItem> meals) {
+    final widgets = <Widget>[];
+    for (final type in NutritionItem.mealTypes) {
+      final items = meals.where((m) => m.mealType.toLowerCase() == type.toLowerCase()).toList();
+      if (items.isEmpty) continue;
+      final kcal = items.fold<double>(0, (a, m) => a + m.calories);
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 8),
+        child: Row(
+          children: [
+            Expanded(child: Text(type, style: AppTypography.titleLarge)),
+            Text('${kcal.round()} kcal', style: AppTypography.monoNumber(fontSize: 12, color: AppColors.primaryCoral)),
+          ],
+        ),
+      ));
+      widgets.addAll(items.map(_foodTile));
+    }
+    final others = meals
+        .where((m) => !NutritionItem.mealTypes.any((t) => t.toLowerCase() == m.mealType.toLowerCase()))
+        .toList();
+    if (others.isNotEmpty) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 8),
+        child: Text('Other', style: AppTypography.titleLarge),
+      ));
+      widgets.addAll(others.map(_foodTile));
+    }
+    return widgets;
   }
 
-  Widget _tabBtn(int idx, String title, IconData icon) {
-    final isSel = _selectedTab == idx;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTab = idx),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(color: isSel ? AppColors.primaryCoral : Colors.transparent, borderRadius: BorderRadius.circular(12)),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(icon, size: 15, color: isSel ? Colors.white : AppColors.textBody),
-            const SizedBox(width: 6),
-            Text(title, style: AppTypography.titleMedium.copyWith(fontSize: 13, color: isSel ? Colors.white : AppColors.textHeadline)),
-          ]),
+  Widget _foodTile(NutritionItem f) {
+    return Dismissible(
+      key: ValueKey(f.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(color: AppColors.accentPinkLight, borderRadius: BorderRadius.circular(22)),
+        child: const Icon(Icons.delete_outline, color: AppColors.accentPink),
+      ),
+      onDismissed: (_) => _delete(f),
+      child: AppCard(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(f.name, style: AppTypography.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    '${MetricFormatter.formatWeight(double.parse(f.servingSize.toStringAsFixed(1)))} ${f.servingUnit} - '
+                    'P ${f.proteinGrams.round()}g - C ${f.carbsGrams.round()}g - F ${f.fatGrams.round()}g',
+                    style: AppTypography.bodyMedium.copyWith(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            Text('${f.calories.round()} kcal', style: AppTypography.monoNumber(fontSize: 13)),
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(LucideIcons.trash2, size: 16, color: AppColors.textMuted),
+              onPressed: () => _delete(f),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _emptyState() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
-      decoration: AppTheme.cardDecoration,
-      child: Column(children: [
-        const Icon(LucideIcons.utensilsCrossed, color: AppColors.primaryCoral, size: 28),
-        const SizedBox(height: 10),
-        Text('No meals logged today', style: AppTypography.titleMedium),
-        const SizedBox(height: 4),
-        Text('Pick healthy fitness foods or search Open Food Facts.', style: AppTypography.bodyMedium.copyWith(fontSize: 12)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(onPressed: () => _openSearch(), icon: const Icon(LucideIcons.plus, size: 14), label: const Text('Log First Meal')),
-      ]),
+  Future<void> _delete(NutritionItem f) async {
+    final day = ref.read(dietDateProvider);
+    setState(() => _hidden.add(f.id));
+    await ref.read(nutritionControllerProvider).deleteMeal(f.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('${f.name} removed'),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AppColors.primaryFixedDim,
+          onPressed: () {
+            _hidden.remove(f.id);
+            ref.read(nutritionControllerProvider).addMeal(f, day);
+          },
+        ),
+      ));
+  }
+
+  Widget _dateSwitcher(String day) {
+    final isToday = DateKeys.isToday(day);
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Previous day',
+            icon: const Icon(LucideIcons.chevronLeft, size: 18),
+            onPressed: () => ref.read(dietDateProvider.notifier).shift(-1),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => ref.read(dietDateProvider.notifier).reset(),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(LucideIcons.calendar, size: 15, color: AppColors.primaryCoral),
+                  const SizedBox(width: 6),
+                  Text(DateKeys.relativeLabel(day), style: AppTypography.titleMedium),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Next day',
+            icon: Icon(LucideIcons.chevronRight, size: 18, color: isToday ? AppColors.surfaceContainerHighest : null),
+            onPressed: isToday ? null : () => ref.read(dietDateProvider.notifier).shift(1),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _foodTile(NutritionItem f) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: AppTheme.cardDecoration,
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(f.name, style: AppTypography.titleMedium),
-          Text('${f.mealType} • ${f.calories.toInt()} kcal', style: AppTypography.bodyMedium.copyWith(fontSize: 11)),
-        ])),
-        Text('P: ${f.proteinGrams.toInt()}g | C: ${f.carbsGrams.toInt()}g', style: AppTypography.monoNumber(fontSize: 11)),
-        IconButton(icon: const Icon(LucideIcons.trash2, size: 16, color: AppColors.textMuted), onPressed: () async {
-          await _repository.deleteMeal(f.id);
-          _loadMeals();
-        }),
-      ]),
+  Widget _tabBtn(int idx, String title, IconData icon) {
+    final isSel = _tab == idx;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _tab = idx),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSel ? AppColors.primaryCoral : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: isSel ? Colors.white : AppColors.textBody),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: AppTypography.titleMedium.copyWith(fontSize: 13, color: isSel ? Colors.white : AppColors.textHeadline),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,0 +1,175 @@
+name: Android Release APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Analyze, test and build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        id: analyze
+        continue-on-error: true
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Unit & widget tests
+        id: tests
+        continue-on-error: true
+        run: flutter test --reporter expanded
+
+      - name: Restore cached CI signing key
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v4
+        with:
+          path: .ci-signing
+          key: fittrackr-ci-signing-v1
+
+      - name: Configure release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "Using release keystore from repository secrets."
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+            STORE_PW="$ANDROID_KEYSTORE_PASSWORD"
+            KEY_PW="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+            ALIAS="${ANDROID_KEY_ALIAS:-upload}"
+          else
+            mkdir -p .ci-signing
+            if [ ! -f .ci-signing/upload-keystore.jks ]; then
+              echo "::warning::No signing secrets set - generating a CI signing key (cached between runs). Add ANDROID_KEYSTORE_BASE64 secrets for a permanent key."
+              openssl rand -hex 24 > .ci-signing/password
+              keytool -genkeypair -noprompt -keystore .ci-signing/upload-keystore.jks -storetype PKCS12 \
+                -keyalg RSA -keysize 2048 -validity 10000 -alias upload \
+                -storepass "$(cat .ci-signing/password)" -keypass "$(cat .ci-signing/password)" \
+                -dname "CN=FitTrackr, OU=Mobile, O=FitTrackr, L=Navi Mumbai, ST=Maharashtra, C=IN"
+            fi
+            cp .ci-signing/upload-keystore.jks android/app/upload-keystore.jks
+            STORE_PW="$(cat .ci-signing/password)"
+            KEY_PW="$STORE_PW"
+            ALIAS=upload
+          fi
+          {
+            echo "storePassword=$STORE_PW"
+            echo "keyPassword=$KEY_PW"
+            echo "keyAlias=$ALIAS"
+            echo "storeFile=upload-keystore.jks"
+          } > android/key.properties
+
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(grep -E '^version:' pubspec.yaml | sed -E 's/version: *([0-9.]+).*/\1/')
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$((100 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+
+      - name: Build universal release APK
+        run: >
+          flutter build apk --release
+          --build-name=${{ steps.version.outputs.name }}
+          --build-number=${{ steps.version.outputs.code }}
+
+      - name: Build per-ABI release APKs
+        run: >
+          flutter build apk --release --split-per-abi
+          --build-name=${{ steps.version.outputs.name }}
+          --build-number=${{ steps.version.outputs.code }}
+
+      - name: Collect APKs
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          V=${{ steps.version.outputs.name }}
+          OUT=build/app/outputs/flutter-apk
+          cp "$OUT/app-release.apk" "dist/FitTrackr-v$V-universal.apk"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            if [ -f "$OUT/app-$abi-release.apk" ]; then
+              cp "$OUT/app-$abi-release.apk" "dist/FitTrackr-v$V-$abi.apk"
+            fi
+          done
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh dist
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FitTrackr-v${{ steps.version.outputs.name }}-build${{ steps.version.outputs.code }}
+          path: dist/
+          retention-days: 30
+
+      - name: Fail if analysis or tests failed
+        if: steps.analyze.outcome == 'failure' || steps.tests.outcome == 'failure'
+        run: |
+          echo "::error::flutter analyze: ${{ steps.analyze.outcome }}, flutter test: ${{ steps.tests.outcome }}"
+          exit 1
+
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-build.{1}', steps.version.outputs.name, steps.version.outputs.code) }}
+          name: FitTrackr v${{ steps.version.outputs.name }} (build ${{ steps.version.outputs.code }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            ## FitTrackr v${{ steps.version.outputs.name }}
+
+            **Download:** `FitTrackr-v${{ steps.version.outputs.name }}-universal.apk` works on every Android phone (Android 8.0+).
+            Smaller per-device builds: `arm64-v8a` (almost all modern phones), `armeabi-v7a` (older 32-bit phones), `x86_64` (emulators).
+
+            ### Install
+            1. Download the APK on your phone.
+            2. Open it and allow "Install unknown apps" for your browser/files app when asked.
+            3. If an older FitTrackr signed with a different key is installed, uninstall it first.
+
+            ### Highlights
+            - Live step counting from the phone's hardware sensor, with optional Health Connect sync (Samsung Health, Google Fit, watches)
+            - 9 guided workout plans with set logging, rest timer, pause/resume, PR detection and session history
+            - Nutrition logging with an offline food list, Open Food Facts search, custom foods and BMR/TDEE-based targets
+            - Hydration tracking, weekly plan editor, achievements, training analytics and reminders
+
+            Commit: ${{ github.sha }}
+          files: |
+            dist/*.apk
+            dist/SHA256SUMS.txt

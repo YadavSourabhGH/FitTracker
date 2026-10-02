@@ -15,7 +15,7 @@ FitTrackr's visual identity balances **athletic intensity** with **clinical tele
 
 ### App Icon Asset Reference
 The production-ready app icon has been generated and positioned at:
-`assets/branding/app_icon.jpg`
+`assets/branding/app_icon.png`
 
 ![FitTrackr App Icon](/Users/sourabhyadav/.gemini/antigravity-ide/brain/b35fe463-4492-4391-b5e5-a8afb0891f22/fittrackr_app_icon_1790768303371.jpg)
 

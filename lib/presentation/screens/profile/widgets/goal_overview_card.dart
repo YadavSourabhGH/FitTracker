@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../common_widgets/circular_gauge.dart';
+import '../../../common_widgets/ui_kit.dart';
 
-/// Goal Overview multi-metric card from the right UI reference mockup.
+/// Streak, this week's active days and today's three goal rings.
 class GoalOverviewCard extends StatelessWidget {
   final int streakDays;
-  final List<bool> weekDots;
-  final double movePct;
+  final List<bool> weekDots; // Monday..Sunday
+  final double movePct; // 0..100
   final double exercisePct;
   final double hydrationPct;
+  final VoidCallback? onEditGoal;
 
   const GoalOverviewCard({
     super.key,
@@ -20,93 +21,71 @@ class GoalOverviewCard extends StatelessWidget {
     required this.movePct,
     required this.exercisePct,
     required this.hydrationPct,
+    this.onEditGoal,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppTheme.cardDecoration,
-      child: Row(
+    final todayIdx = DateTime.now().weekday - 1;
+    const letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left: Streak & Weekday Dots
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          SectionHeader(title: 'Goal Overview', actionLabel: onEditGoal == null ? null : 'Edit goal', onAction: onEditGoal),
+          const SizedBox(height: 12),
+          Row(
             children: [
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.flame, color: AppColors.primaryCoral, size: 20),
-                  const SizedBox(width: 4),
-                  Text('$streakDays', style: AppTypography.displayLarge.copyWith(fontSize: 22)),
-                ],
-              ),
-              Text('Day Streak', style: AppTypography.bodyMedium),
-              const SizedBox(height: 8),
-              Row(
-                children: ['S', 'M', 'T', 'W', 'T', 'F', 'S'].asMap().entries.map((entry) {
-                  final idx = entry.key;
-                  final dayChar = entry.value;
-                  final todayIdx = DateTime.now().weekday % 7;
-                  final isToday = idx == todayIdx;
-                  final isPast = idx < todayIdx;
-                  final isDone = (isPast && (todayIdx - idx) <= streakDays && streakDays > 0) ||
-                      (isToday && streakDays > 0);
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: Column(
-                      children: [
-                        Text(
-                          dayChar,
-                          style: AppTypography.labelSmall.copyWith(
-                            fontSize: 8,
-                            color: isToday ? AppColors.primaryCoral : AppColors.textBody,
-                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                          ),
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.flame, color: AppColors.primaryCoral, size: 20),
+                      const SizedBox(width: 4),
+                      Text('$streakDays', style: AppTypography.displayLarge.copyWith(fontSize: 22)),
+                    ],
+                  ),
+                  Text('Day Streak', style: AppTypography.bodyMedium),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: List.generate(7, (idx) {
+                      final isToday = idx == todayIdx;
+                      final isDone = idx < weekDots.length && weekDots[idx];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 5),
+                        child: Column(
+                          children: [
+                            Text(
+                              letters[idx],
+                              style: AppTypography.labelSmall.copyWith(
+                                fontSize: 8,
+                                color: isToday ? AppColors.primaryCoral : AppColors.textBody,
+                                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: isDone ? AppColors.primaryCoral : AppColors.cardBorder,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 3),
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isDone ? AppColors.primaryCoral : AppColors.cardBorder,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-
-          const Spacer(),
-          Container(width: 1, height: 60, color: AppColors.divider),
-          const Spacer(),
-
-          // Right: 3 Progress Gauges (Move, Exercise, Hydration)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Goal Overview', style: AppTypography.titleMedium),
-                  const SizedBox(width: 16),
-                  Text('Edit goal', style: AppTypography.titleMedium.copyWith(color: AppColors.primaryCoral, fontSize: 12)),
+                      );
+                    }),
+                  ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _ringTile('Move', movePct, AppColors.primaryCoral, LucideIcons.flame),
-                  const SizedBox(width: 10),
-                  _ringTile('Exercise', exercisePct, AppColors.accentGreen, LucideIcons.footprints),
-                  const SizedBox(width: 10),
-                  _ringTile('Hydration', hydrationPct, AppColors.accentBlue, LucideIcons.droplets),
-                ],
-              ),
+              const Spacer(),
+              _ringTile('Move', movePct, AppColors.primaryCoral),
+              const SizedBox(width: 10),
+              _ringTile('Exercise', exercisePct, AppColors.accentGreen),
+              const SizedBox(width: 10),
+              _ringTile('Water', hydrationPct, AppColors.accentBlue),
             ],
           ),
         ],
@@ -114,15 +93,10 @@ class GoalOverviewCard extends StatelessWidget {
     );
   }
 
-  Widget _ringTile(String label, double pct, Color color, IconData icon) {
+  Widget _ringTile(String label, double pct, Color color) {
     return Column(
       children: [
-        CircularGauge(
-          percentage: pct,
-          size: 40,
-          strokeWidth: 4.5,
-          progressColor: color,
-        ),
+        CircularGauge(percentage: pct, size: 44, strokeWidth: 4.5, progressColor: color),
         const SizedBox(height: 4),
         Text(label, style: AppTypography.labelSmall.copyWith(fontSize: 9)),
       ],

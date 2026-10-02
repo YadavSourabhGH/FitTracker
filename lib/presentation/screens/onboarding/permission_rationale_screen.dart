@@ -1,113 +1,182 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_typography.dart';
+import '../../../data/services/health_connect_service.dart';
+import '../../../data/services/notification_service.dart';
+import '../../common_widgets/ui_kit.dart';
+import '../../providers/app_providers.dart';
+import '../../providers/step_providers.dart';
 import '../shell/main_shell_screen.dart';
 
-/// Permission Rationale Screen for Health Connect and Activity Recognition.
-class PermissionRationaleScreen extends StatelessWidget {
+/// Explains and requests the permissions FitTrackr uses.
+class PermissionRationaleScreen extends ConsumerStatefulWidget {
   const PermissionRationaleScreen({super.key});
 
-  Future<void> _requestAndEnter(BuildContext context) async {
-    // Request Android hardware activity recognition
-    await Permission.activityRecognition.request();
+  @override
+  ConsumerState<PermissionRationaleScreen> createState() => _PermissionRationaleScreenState();
+}
 
-    if (!context.mounted) return;
-    Navigator.pushReplacement(
-      context,
+class _PermissionRationaleScreenState extends ConsumerState<PermissionRationaleScreen> {
+  bool _activity = false;
+  bool _notifications = false;
+  bool _health = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final activity = await Permission.activityRecognition.isGranted;
+    final notif = await NotificationService.instance.areEnabled();
+    if (!mounted) return;
+    setState(() {
+      _activity = activity;
+      _notifications = notif;
+    });
+  }
+
+  Future<void> _requestActivity() async {
+    final status = await Permission.activityRecognition.request();
+    if (status.isPermanentlyDenied) await openAppSettings();
+    await _refresh();
+  }
+
+  Future<void> _requestNotifications() async {
+    final granted = await NotificationService.instance.requestPermission();
+    if (mounted) setState(() => _notifications = granted);
+  }
+
+  Future<void> _connectHealth() async {
+    final service = ref.read(healthConnectServiceProvider);
+    final state = await service.getState();
+    if (state == HealthConnectState.needsInstall) {
+      await service.installOrUpdate();
+      return;
+    }
+    if (state == HealthConnectState.unavailable) {
+      if (mounted) showAppSnack(context, 'Health Connect is not available on this device.');
+      return;
+    }
+    final granted = await service.requestPermissions() || await service.hasPermissions();
+    final settings = ref.read(settingsProvider);
+    await ref.read(settingsProvider.notifier).save(settings.copyWith(healthConnectEnabled: granted));
+    if (mounted) setState(() => _health = granted);
+  }
+
+  Future<void> _finish() async {
+    setState(() => _busy = true);
+    await ref.read(settingsRepositoryProvider).setOnboardingDone(true);
+    ref.invalidate(todayStepProvider);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const MainShellScreen()),
+      (_) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.scaffoldBase,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryCoralLight,
-                  shape: BoxShape.circle,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+          children: [
+            const IconBadge(icon: LucideIcons.heartPulse, size: 64, iconSize: 32),
+            const SizedBox(height: 20),
+            Text('Connect your activity', style: AppTypography.headlineLarge),
+            const SizedBox(height: 8),
+            Text(
+              'FitTrackr only shows real measurements from your phone and connected apps - never simulated numbers. '
+              'Choose what to allow; you can change this later in Settings.',
+              style: AppTypography.bodyLarge,
+            ),
+            const SizedBox(height: 24),
+            _item(
+              icon: LucideIcons.footprints,
+              title: 'Physical activity (recommended)',
+              body: 'Counts steps with your phone\'s low-power hardware step counter.',
+              granted: _activity,
+              onTap: _requestActivity,
+            ),
+            _item(
+              icon: LucideIcons.bell,
+              title: 'Notifications',
+              body: 'Optional reminders for workouts, water and your step goal.',
+              granted: _notifications,
+              onTap: _requestNotifications,
+            ),
+            _item(
+              icon: LucideIcons.refreshCw,
+              title: 'Health Connect (optional)',
+              body: 'Import steps, heart rate, sleep and SpO2 from Samsung Health, Google Fit or your watch.',
+              granted: _health,
+              onTap: _connectHealth,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(LucideIcons.shieldCheck, size: 16, color: AppColors.accentGreen),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'All data is stored locally on this device. No account required.',
+                    style: AppTypography.bodyMedium,
+                  ),
                 ),
-                child: const Icon(LucideIcons.heartPulse, color: AppColors.primaryCoral, size: 32),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _busy ? null : _finish,
+                child: const Text('Get started'),
               ),
-              const SizedBox(height: 24),
-              Text('Real Health Integration', style: AppTypography.headlineLarge),
-              const SizedBox(height: 12),
-              Text(
-                'FitTrackr strictly uses real Android APIs with zero fake or simulated data. We connect to your device hardware and Health Connect.',
-                style: AppTypography.bodyLarge,
-              ),
-              const SizedBox(height: 32),
-
-              _featureItem(
-                LucideIcons.footprints,
-                'Hardware Step Counter',
-                'Reads real step counts directly from your phone pedometer chip with sub-2% battery footprint.',
-              ),
-              const SizedBox(height: 20),
-
-              _featureItem(
-                LucideIcons.refreshCw,
-                'Health Connect & Samsung Health',
-                'Synchronizes steps, active calories, and distance recorded by your Samsung Galaxy Watch or Google Pixel Watch.',
-              ),
-              const SizedBox(height: 20),
-
-              _featureItem(
-                LucideIcons.shieldCheck,
-                '100% On-Device Privacy',
-                'All workout records and telemetry are stored securely in your local SQLite database without cloud tracking.',
-              ),
-
-              const Spacer(),
-
-              ElevatedButton(
-                onPressed: () => _requestAndEnter(context),
-                child: const Text('Connect & Open FitTrackr'),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _featureItem(IconData icon, String title, String description) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
-          child: Icon(icon, color: AppColors.primaryCoral, size: 22),
+  Widget _item({
+    required IconData icon,
+    required String title,
+    required String body,
+    required bool granted,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            IconBadge(icon: icon, size: 42, circle: false),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(body, style: AppTypography.bodyMedium),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            granted
+                ? const Icon(Icons.check_circle, color: AppColors.accentGreen)
+                : TextButton(onPressed: onTap, child: const Text('Allow')),
+          ],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppTypography.titleMedium),
-              const SizedBox(height: 3),
-              Text(description, style: AppTypography.bodyMedium),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

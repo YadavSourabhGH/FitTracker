@@ -5,7 +5,7 @@ class DietSuggestionService {
   static const List<DietSuggestion> suggestions = [
     DietSuggestion(
       id: 'ds_1',
-      title: 'Post-Workout Anabolic Window',
+      title: 'Post-Workout Protein',
       category: 'Muscle Gain',
       timing: 'Post-Workout',
       recommendation: 'Target 25-40g high-leucine protein within 45 minutes of training to stimulate muscle protein synthesis.',
@@ -47,6 +47,33 @@ class DietSuggestionService {
       recommendation: 'Drink 500ml water with a pinch of pink salt immediately upon waking to restore overnight fluid loss.',
       foods: ['Filtered Water', 'Electrolyte Water', 'Coconut Water'],
       iconName: 'droplets',
+    ),
+    DietSuggestion(
+      id: 'ds_6',
+      title: 'Protein at Every Meal',
+      category: 'Muscle Gain',
+      timing: 'All Day',
+      recommendation: 'Spread 1.6-2.2 g of protein per kg of body weight across 3-5 meals of roughly 0.4 g/kg each to maximise muscle protein synthesis.',
+      foods: ['Paneer', 'Lentils', 'Chicken Breast', 'Tofu', 'Eggs'],
+      iconName: 'dumbbell',
+    ),
+    DietSuggestion(
+      id: 'ds_7',
+      title: 'Fibre and Protein First',
+      category: 'Fat Loss',
+      timing: 'Dinner',
+      recommendation: 'Start meals with vegetables and a lean protein source. High-protein, high-fibre meals improve fullness at a lower calorie intake.',
+      foods: ['Chickpeas', 'Cottage Cheese', 'Mixed Salad', 'Grilled Fish'],
+      iconName: 'scale',
+    ),
+    DietSuggestion(
+      id: 'ds_8',
+      title: 'Carbohydrates Around Training',
+      category: 'Energy',
+      timing: 'Post-Workout',
+      recommendation: 'After hard or long sessions, pair protein with 1 g/kg of carbohydrate to replenish glycogen, especially if training again within 24 hours.',
+      foods: ['White Rice', 'Potato', 'Fruit Smoothie', 'Chapati'],
+      iconName: 'zap',
     ),
   ];
 

@@ -20,7 +20,7 @@ class FloatingNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20, top: 8),
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12, top: 18),
       child: Stack(
         alignment: Alignment.center,
         clipBehavior: Clip.none,

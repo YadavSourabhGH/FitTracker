@@ -9,7 +9,7 @@ class NutritionItem {
   final double proteinGrams;
   final double carbsGrams;
   final double fatGrams;
-  final String mealType; // breakfast, lunch, dinner, snack
+  final String mealType; // Breakfast, Lunch, Dinner, Snack
 
   const NutritionItem({
     required this.id,
@@ -24,18 +24,45 @@ class NutritionItem {
     required this.mealType,
   });
 
+  static const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+
+  /// Default meal slot for the current time of day.
+  static String mealTypeForNow() {
+    final h = DateTime.now().hour;
+    if (h < 11) return 'Breakfast';
+    if (h < 16) return 'Lunch';
+    if (h < 19) return 'Snack';
+    return 'Dinner';
+  }
+
+  /// Returns a copy scaled by [servings] with a fresh id and meal slot.
+  NutritionItem scaled(double servings, {required String id, required String mealType}) {
+    return NutritionItem(
+      id: id,
+      name: name,
+      brand: brand,
+      servingSize: servingSize * servings,
+      servingUnit: servingUnit,
+      calories: calories * servings,
+      proteinGrams: proteinGrams * servings,
+      carbsGrams: carbsGrams * servings,
+      fatGrams: fatGrams * servings,
+      mealType: mealType,
+    );
+  }
+
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'name': name,
-    'brand': brand,
-    'servingSize': servingSize,
-    'servingUnit': servingUnit,
-    'calories': calories,
-    'proteinGrams': proteinGrams,
-    'carbsGrams': carbsGrams,
-    'fatGrams': fatGrams,
-    'mealType': mealType,
-  };
+        'id': id,
+        'name': name,
+        'brand': brand,
+        'servingSize': servingSize,
+        'servingUnit': servingUnit,
+        'calories': calories,
+        'proteinGrams': proteinGrams,
+        'carbsGrams': carbsGrams,
+        'fatGrams': fatGrams,
+        'mealType': mealType,
+      };
 
   factory NutritionItem.fromMap(Map<String, dynamic> map) {
     return NutritionItem(
@@ -48,7 +75,7 @@ class NutritionItem {
       proteinGrams: (map['proteinGrams'] as num?)?.toDouble() ?? 0.0,
       carbsGrams: (map['carbsGrams'] as num?)?.toDouble() ?? 0.0,
       fatGrams: (map['fatGrams'] as num?)?.toDouble() ?? 0.0,
-      mealType: map['mealType'] as String? ?? 'breakfast',
+      mealType: map['mealType'] as String? ?? 'Snack',
     );
   }
 }

@@ -2,7 +2,7 @@
 
 **Document Version:** 1.0.0-PROD  
 **Target Platform:** Android 15 Adaptive Icons, Dynamic Themed Icons & Flutter Assets  
-**Primary Icon Asset:** `assets/branding/app_icon.jpg`  
+**Primary Icon Asset:** `assets/branding/app_icon.png`  
 
 ---
 
@@ -136,3 +136,19 @@ FitTrackr integrates **Rive** (`rive: ^0.13.0`) for interactive vector state mac
 | Health Connect Active | `PhosphorIconsFill.heartbeat` | Two-way Samsung / Health sync |
 | Rest Timer | `PhosphorIconsRegular.timer` | Interval recovery clock |
 | Plate Calculator | `PhosphorIconsRegular.disc` | Barbell plate loading visualizer |
+
+---
+
+## v1.1 icon set
+
+The launcher icon was redrawn to match the in-app coral brand: a white flame inside an activity ring on a coral gradient.
+
+| Asset | Location |
+|---|---|
+| Source SVGs | `assets/branding/source/*.svg` |
+| 1024 px master | `assets/branding/app_icon.png` |
+| Play Store 512 px | `assets/branding/play_store_icon_512.png` |
+| Legacy + round launcher PNGs | `android/app/src/main/res/mipmap-*/ic_launcher(_round).png` |
+| Adaptive layers (foreground, background, monochrome) | `android/app/src/main/res/mipmap-*/ic_launcher_*.png`, `mipmap-anydpi-v26/*.xml` |
+| Notification icon | `android/app/src/main/res/drawable-*/ic_stat_notify.png` |
+| Splash logo | `android/app/src/main/res/drawable-nodpi/splash_logo.png` |

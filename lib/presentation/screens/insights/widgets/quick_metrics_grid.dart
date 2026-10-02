@@ -26,7 +26,7 @@ class QuickMetricsGrid extends StatelessWidget {
         const SizedBox(width: 8),
         _metricTile(LucideIcons.flame, kcalText, 'Kcal', AppColors.primaryCoral),
         const SizedBox(width: 8),
-        _metricTile(LucideIcons.mapPin, distanceText, 'km', AppColors.textBody),
+        _metricTile(LucideIcons.mapPin, distanceText, 'Distance', AppColors.textBody),
         const SizedBox(width: 8),
         _metricTile(LucideIcons.timer, activeTimeText, 'Active', AppColors.primaryCoralDark),
       ],

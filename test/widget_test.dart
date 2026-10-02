@@ -1,106 +1,104 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fittrackr/main.dart';
-import 'package:fittrackr/presentation/screens/insights/widgets/health_overview_row.dart';
-import 'package:fittrackr/presentation/screens/profile/widgets/goal_overview_card.dart';
-import 'package:fittrackr/presentation/screens/diet/food_search_modal.dart';
-import 'package:fittrackr/presentation/screens/diet/diet_screen.dart';
+import 'package:fittrackr/data/models/user_settings.dart';
 import 'package:fittrackr/presentation/screens/diet/widgets/diet_suggestions_view.dart';
+import 'package:fittrackr/presentation/screens/insights/widgets/coach_insight_banner.dart';
+import 'package:fittrackr/presentation/screens/insights/widgets/goal_progress_card.dart';
+import 'package:fittrackr/presentation/screens/insights/widgets/weekly_distribution_bars.dart';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('FitTrackr app initialization smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const ProviderScope(
-        child: FitTrackrApp(initialOnboardingDone: true),
+  testWidgets('first launch shows onboarding profile form', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: FitTrackrApp(initialOnboardingDone: false)));
+    await tester.pump();
+    expect(find.text('Welcome to'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Primary goal'), findsOneWidget);
+  });
+
+  testWidgets('onboarding validates the name field', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: FitTrackrApp(initialOnboardingDone: false)));
+    await tester.pump();
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    expect(find.text('Please enter your name'), findsOneWidget);
+  });
+
+  testWidgets('weekly distribution renders one label per day', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: WeeklyDistributionBars(
+          values: [1000, 12000, 0, 8000, 9000, 3000, 500],
+          labels: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+          goal: 8000,
+        ),
       ),
-    );
-    expect(find.byType(FitTrackrApp), findsOneWidget);
+    ));
+    for (final l in ['A', 'B', 'C', 'D', 'E', 'F', 'G']) {
+      expect(find.text(l), findsOneWidget);
+    }
   });
 
-  testWidgets('HealthOverviewRow shows dash for unmeasured sensor values', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: HealthOverviewRow()),
-      ),
-    );
-    expect(find.text('-'), findsNWidgets(4));
-    expect(find.text('Heart Rate'), findsOneWidget);
-    expect(find.textContaining('Sleep'), findsOneWidget);
-    expect(find.text('Hydration'), findsOneWidget);
-    expect(find.textContaining('SpO2'), findsOneWidget);
-  });
-
-  testWidgets('GoalOverviewCard displays streak and weekday dots', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: GoalOverviewCard(
-            streakDays: 1,
-            weekDots: [false, false, false, false, false, false, false],
-            movePct: 0.2,
-            exercisePct: 0.1,
-            hydrationPct: 0.0,
+  testWidgets('goal progress card shows remaining steps and edit action', (tester) async {
+    var tapped = false;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: GoalProgressCard(
+            currentSteps: 2500,
+            targetSteps: 8000,
+            percentage: 31.25,
+            streakDays: 3,
+            weekValues: const [0, 0, 0, 0, 0, 0, 2500],
+            weekLabels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            onEditGoal: () => tapped = true,
           ),
         ),
       ),
-    );
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('Day Streak'), findsOneWidget);
-    expect(find.text('W'), findsOneWidget);
+    ));
+    expect(find.text('5,500 steps left'), findsOneWidget);
+    expect(find.text('3 day streak'), findsOneWidget);
+    await tester.tap(find.text('Edit goal'));
+    expect(tapped, isTrue);
   });
 
-  testWidgets('FoodSearchModal renders popular healthy choices by default', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: FoodSearchModal(onFoodSelected: (_) {}),
-        ),
+  testWidgets('diet suggestions filter by category', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(child: DietSuggestionsView(goal: FitnessGoal.gain)),
       ),
-    );
-    expect(find.text('Popular Nutritious Choices'), findsOneWidget);
-    expect(find.text('Rolled Oats (100g)'), findsOneWidget);
-    expect(find.text('Grilled Chicken Breast (150g)'), findsOneWidget);
-    expect(find.text('Greek Yogurt 0% (200g)'), findsOneWidget);
-  });
-
-  testWidgets('DietSuggestionsView renders category filters and recommendation cards', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(child: DietSuggestionsView()),
-        ),
-      ),
-    );
+    ));
     expect(find.text('All'), findsOneWidget);
-    expect(find.text('Muscle Gain'), findsOneWidget);
-    expect(find.text('Fat Loss'), findsOneWidget);
-    expect(find.text('Post-Workout Anabolic Window'), findsOneWidget);
+    expect(find.text('Post-Workout Protein'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Fat Loss'));
+    await tester.pump();
+    expect(find.text('Post-Workout Protein'), findsNothing);
+    expect(find.text('High-Volume Calorie Deficit'), findsOneWidget);
   });
 
-  testWidgets('DietScreen switches between Track Meals and Diet Suggestions tabs', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: DietScreen(),
-      ),
+  test('coach insight prioritises a scheduled workout', () {
+    final insight = CoachInsight.from(
+      steps: 1000,
+      stepGoal: 8000,
+      water: 4,
+      waterGoal: 8,
+      kcalEaten: 500,
+      kcalTarget: 2200,
+      workedOutToday: false,
+      restDay: false,
+      hour: 10,
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(find.text('Track Meals'), findsOneWidget);
-    expect(find.text('Diet Suggestions'), findsOneWidget);
-    expect(find.text('Daily Calories'), findsOneWidget);
-
-    await tester.tap(find.text('Diet Suggestions'));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(DietSuggestionsView), findsOneWidget);
-    expect(find.text('Post-Workout Anabolic Window'), findsOneWidget);
+    expect(insight.targetTab, 1);
   });
 }
